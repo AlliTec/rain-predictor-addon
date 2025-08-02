@@ -80,4 +80,5 @@ schema:
     log_level: list(DEBUG|INFO|WARNING|ERROR)
     save_images: bool
 
-image: "ghcr.io/AlliTec/rain-predictor-addon"
+
+
