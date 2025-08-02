@@ -2,7 +2,7 @@ name: Rain Predictor
 version: "1.0.0"
 slug: rain_predictor
 description: "Advanced rain prediction using radar image analysis"
-url: "https://github.com/yourusername/rain-predictor-addon"
+url: "https://github.com/AlliTec/rain-predictor-addon"
 arch:
   - armhf
   - armv7
@@ -79,4 +79,5 @@ schema:
   debug:
     log_level: list(DEBUG|INFO|WARNING|ERROR)
     save_images: bool
-image: "ghcr.io/yourusername/rain-predictor-addon"
+
+image: "ghcr.io/AlliTec/rain-predictor-addon"
