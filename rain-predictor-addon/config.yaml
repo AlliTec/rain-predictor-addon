@@ -1,0 +1,82 @@
+name: Rain Predictor
+version: "1.0.0"
+slug: rain_predictor
+description: "Advanced rain prediction using radar image analysis"
+url: "https://github.com/yourusername/rain-predictor-addon"
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+  - i386
+init: false
+startup: services
+services:
+  - mqtt:want
+ports:
+  "8099/tcp": 8099
+ports_description:
+  "8099/tcp": "Web UI for configuration"
+options:
+  latitude: -24.981262201681634
+  longitude: 151.86545522467864
+  run_interval_minutes: 3
+  api_url: "https://api.rainviewer.com/public/weather-maps.json"
+  entities:
+    time: "input_number.rain_arrival_minutes"
+    distance: "input_number.rain_prediction_distance"
+    speed: "input_number.rain_prediction_speed"
+    direction: "input_number.rain_cell_direction"
+    bearing: "input_number.bearing_to_rain_cell"
+  defaults:
+    no_rain_value: 999
+    no_direction_value: -1
+    no_bearing_value: -1
+  image_settings:
+    size: 256
+    zoom: 8
+    color_scheme: 3
+    options: "0_0"
+  analysis_settings:
+    rain_threshold: 75
+    lat_range_deg: 1.80
+    lon_range_deg: 1.99
+    arrival_angle_threshold_deg: 45
+  tracking_settings:
+    max_tracking_distance_km: 30
+    min_track_length: 2
+  debug:
+    log_level: "INFO"
+    save_images: false
+schema:
+  latitude: float
+  longitude: float
+  run_interval_minutes: int(1,60)
+  api_url: url
+  entities:
+    time: str
+    distance: str?
+    speed: str?
+    direction: str?
+    bearing: str?
+  defaults:
+    no_rain_value: int
+    no_direction_value: int
+    no_bearing_value: int
+  image_settings:
+    size: list(128|256|512)
+    zoom: int(1,15)
+    color_scheme: int(0,8)
+    options: str
+  analysis_settings:
+    rain_threshold: int(1,255)
+    lat_range_deg: float(0.1,10.0)
+    lon_range_deg: float(0.1,10.0)
+    arrival_angle_threshold_deg: float(1,180)
+  tracking_settings:
+    max_tracking_distance_km: int(1,100)
+    min_track_length: int(2,10)
+  debug:
+    log_level: list(DEBUG|INFO|WARNING|ERROR)
+    save_images: bool
+image: "ghcr.io/yourusername/rain-predictor-addon"
