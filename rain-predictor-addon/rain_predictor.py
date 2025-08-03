@@ -19,6 +19,15 @@ from math import radians, cos, sin, asin, sqrt, atan2, degrees
 import threading
 import signal
 
+# Get the Supervisor token from the environment variable
+SUPERVISOR_TOKEN = os.environ.get('SUPERVISOR_TOKEN')
+
+# Create the headers dictionary that will be used in all API calls
+AUTH_HEADERS = {
+    'Authorization': f'Bearer {SUPERVISOR_TOKEN}',
+    'Content-Type': 'application/json',
+}
+
 class AddonConfig:
     """Load and manage addon configuration"""
     
@@ -66,15 +75,20 @@ class HomeAssistantAPI:
     
     def __init__(self):
         self.base_url = "http://supervisor/core/api"
-        self.headers = {
-            "Authorization": f"Bearer {os.environ.get('SUPERVISOR_TOKEN')}",
-            "Content-Type": "application/json"
-        }
-        self.session = requests.Session()
-        self.session.headers.update(self.headers)
     
     def call_service(self, service, entity_id, value):
         """Call a Home Assistant service"""
+        # Get the latest token RIGHT BEFORE you use it.
+        token = os.environ.get('SUPERVISOR_TOKEN')
+        if not token:
+            logging.error("SUPERVISOR_TOKEN environment variable not found!")
+            return False
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
         domain, service_name = service.split('/', 1)
         url = f"{self.base_url}/services/{domain}/{service_name}"
         data = {
@@ -83,12 +97,15 @@ class HomeAssistantAPI:
         }
         
         try:
-            response = self.session.post(url, json=data, timeout=10)
+            # Use the fresh headers for this specific request
+            response = requests.post(url, headers=headers, json=data, timeout=10)
             response.raise_for_status()
             logging.debug(f"Successfully called {service} for {entity_id} with value {value}")
             return True
         except requests.exceptions.RequestException as e:
-            logging.error(f"Error calling service {service} for {entity_id}: {e}")
+            # The error message from the response is often more useful
+            error_details = e.response.text if e.response else str(e)
+            logging.error(f"Error calling service {service} for {entity_id}: {error_details}")
             return False
 
 class RainPredictor:
