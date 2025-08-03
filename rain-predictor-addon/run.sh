@@ -1,5 +1,8 @@
 #!/usr/bin/with-contenv bash
 
+# Import Bashio
+source /usr/lib/bashio
+
 # Set log level
 LOG_LEVEL=$(bashio::config 'debug.log_level' 'INFO')
 export LOG_LEVEL
