@@ -36,6 +36,8 @@ def get_ha_state(entity_id):
 @app.route('/')
 def index():
     """Render the main web UI page."""
+    ingress_entry = os.environ.get('INGRESS_ENTRY', '')
+    
     # We will pass the lat/lon to the template for the map's initial view
     lat = get_ha_state('input_number.rain_prediction_latitude') # Assuming you have this entity
     lon = get_ha_state('input_number.rain_prediction_longitude') # Assuming you have this entity
