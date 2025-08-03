@@ -6,122 +6,78 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rain Predictor</title>
+    <!-- THIS IS THE CRITICAL FIX FOR THE 404 ERRORS -->
+    <base href="{{ ingress_entry }}/">
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body, html {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            background-color: #1c1c1c;
-            color: #e0e0e0;
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-        }
-        #map {
-            flex-grow: 1; /* Map takes up all available space */
-        }
-        .leaflet-container {
-            background-color: #1c1c1c;
-        }
-        #data-panel {
-            background-color: #2a2a2a;
-            padding: 10px;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            border-top: 1px solid #444;
-            flex-shrink: 0;
-        }
-        .data-item {
-            text-align: center;
-        }
-        .data-value {
-            font-size: 1.5em;
-            font-weight: bold;
-        }
-        .data-label {
-            font-size: 0.8em;
-            color: #aaa;
-        }
+        body, html { height: 100%; margin: 0; padding: 0; background-color: #1c1c1c; color: #e0e0e0; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+        #map { flex-grow: 1; }
+        .leaflet-container { background-color: #1c1c1c; }
+        #data-panel { background-color: #2a2a2a; padding: 10px; display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #444; flex-shrink: 0; }
+        .data-item { text-align: center; }
+        .data-value { font-size: 1.5em; font-weight: bold; }
+        .data-label { font-size: 0.8em; color: #aaa; }
     </style>
 </head>
-<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}">
+<body>
 
     <div id="map"></div>
     <div id="data-panel">
-        <div class="data-item">
-            <div class="data-value" id="time-to-rain">--</div>
-            <div class="data-label">TIME TO RAIN</div>
-        </div>
-        <div class="data-item">
-            <div class="data-value" id="distance">--</div>
-            <div class="data-label">DISTANCE</div>
-        </div>
-        <div class="data-item">
-            <div class="data-value" id="speed">--</div>
-            <div class="data-label">SPEED</div>
-        </div>
-        <div class="data-item">
-            <div class="data-value" id="direction">--</div>
-            <div class="data-label">DIRECTION</div>
-        </div>
-        <div class="data-item">
-            <div class="data-value" id="bearing">--</div>
-            <div class="data-label">BEARING</div>
-        </div>
+        <div class="data-item"><div class="data-value" id="time-to-rain">--</div><div class="data-label">TIME TO RAIN</div></div>
+        <div class="data-item"><div class="data-value" id="distance">--</div><div class="data-label">DISTANCE</div></div>
+        <div class="data-item"><div class="data-value" id="speed">--</div><div class="data-label">SPEED</div></div>
+        <div class="data-item"><div class="data-value" id="direction">--</div><div class="data-label">DIRECTION</div></div>
+        <div class="data-item"><div class="data-value" id="bearing">--</div><div class="data-label">BEARING</div></div>
     </div>
 
     <script>
-        let map; // Define map globally so we can initialize it later
+        // THIS IS THE CRITICAL FIX FOR THE MAP LOCATION
+        // We parse the data embedded directly into the page by the Python backend.
+        const initialData = JSON.parse('{{ initial_data_json | tojson | safe }}');
+        
+        const latitude = parseFloat(initialData.latitude);
+        const longitude = parseFloat(initialData.longitude);
+        let radarLayer = null;
 
-        // Function to update the data panel AND initialize/update the map
-        async function updateData() {
+        // Initialize Leaflet Map
+        const map = L.map('map').setView([latitude, longitude], 8);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+        L.marker([latitude, longitude]).addTo(map);
+
+        function updateDataDisplay(data) {
+            let timeText = data.time_to_rain;
+            if (timeText === '999') timeText = "No Rain";
+            else if (timeText !== null && timeText !== '--') timeText = `${timeText} min`;
+            else timeText = '--';
+            document.getElementById('time-to-rain').innerText = timeText;
+
+            document.getElementById('distance').innerText = data.distance !== null && data.distance !== '--' ? `${data.distance} km` : '--';
+            document.getElementById('speed').innerText = data.speed !== null && data.speed !== '--' ? `${data.speed} kph` : '--';
+            document.getElementById('direction').innerText = data.direction !== null && data.direction !== 'N/A' ? `${data.direction}°` : 'N/A';
+            document.getElementById('bearing').innerText = data.bearing !== null && data.bearing !== 'N/A' ? `${data.bearing}°` : 'N/A';
+        }
+
+        async function fetchAndUpdateData() {
             try {
-                // Use a relative path, which Ingress will handle correctly
+                // Now this relative path works because of the <base> tag
                 const response = await fetch('api/data');
                 const data = await response.json();
-
-                // --- MAP INITIALIZATION ---
-                // Only initialize the map once, using the first data we get
-                if (!map && data.latitude && data.longitude) {
-                    const lat = parseFloat(data.latitude);
-                    const lon = parseFloat(data.longitude);
-
-                    map = L.map('map').setView([lat, lon], 8);
-                    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-                        maxZoom: 19
-                    }).addTo(map);
-                    L.marker([lat, lon]).addTo(map);
-                }
-                
-                // --- DATA PANEL UPDATE ---
-                let timeText = data.time_to_rain;
-                if (timeText === '999') timeText = "No Rain";
-                else if (timeText !== null) timeText = `${timeText} min`;
-                else timeText = '--';
-                document.getElementById('time-to-rain').innerText = timeText;
-
-                document.getElementById('distance').innerText = data.distance !== null ? `${data.distance} km` : '--';
-                document.getElementById('speed').innerText = data.speed !== null ? `${data.speed} kph` : '--';
-                document.getElementById('direction').innerText = data.direction !== null ? `${data.direction}°` : 'N/A';
-                document.getElementById('bearing').innerText = data.bearing !== null ? `${data.bearing}°` : 'N/A';
-                
+                updateDataDisplay(data);
             } catch (error) {
                 console.error('Error fetching prediction data:', error);
             }
         }
 
-        // Other functions (like updateRadarLayer) remain the same...
-        let radarLayer = null;
         async function updateRadarLayer() {
             try {
                 const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
                 const data = await response.json();
                 const radarUrl = `${data.host}${data.radar.past[data.radar.past.length - 1].path}/512/{z}/{x}/{y}/2/1_1.png`;
-                if (map) { // Only add layer if map exists
+                if (map) {
                     if (radarLayer) map.removeLayer(radarLayer);
                     radarLayer = L.tileLayer(radarUrl, { tileSize: 512, opacity: 0.8 }).addTo(map);
                     console.log('Radar layer updated.');
@@ -133,11 +89,11 @@
 
         // Run updates on page load and then on intervals
         document.addEventListener('DOMContentLoaded', () => {
-            updateData(); // Initial call
+            updateDataDisplay(initialData); // Use the embedded data for the first load
             updateRadarLayer();
-            setInterval(updateData, 5000); // Update data every 5 seconds
-            setInterval(updateRadarLayer, 10 * 60 * 1000); // Update radar every 10 minutes
+            setInterval(fetchAndUpdateData, 5000);
+            setInterval(updateRadarLayer, 10 * 60 * 1000);
         });
     </script>
-    </body>
+</body>
 </html>
