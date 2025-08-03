@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv bashio
+#!/usr/bin/with-contenv bash
 
 # Set log level
 LOG_LEVEL=$(bashio::config 'debug.log_level' 'INFO')
@@ -34,4 +34,5 @@ bashio::log.info "Starting rain predictor service..."
 python3 /rain_predictor.py
 
 # If main process exits, kill web UI
+
 kill $WEB_UI_PID 2>/dev/null || true
