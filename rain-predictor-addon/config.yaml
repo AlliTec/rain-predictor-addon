@@ -11,7 +11,7 @@ arch:
   - i386
 api: true
 ingress: true
-panel_icon: mdi:chart-line
+panel_icon: mdi:weather-lightning-rainy
 init: false
 startup: services
 services:

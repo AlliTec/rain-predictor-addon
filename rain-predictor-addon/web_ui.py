@@ -36,13 +36,15 @@ def get_ha_state(entity_id):
 @app.route('/')
 def index():
     """Render the main web UI page."""
+    # Get the unique Ingress path from the environment
     ingress_entry = os.environ.get('INGRESS_ENTRY', '')
-    
-    # We will pass the lat/lon to the template for the map's initial view
-    lat = get_ha_state('input_number.rain_prediction_latitude') # Assuming you have this entity
-    lon = get_ha_state('input_number.rain_prediction_longitude') # Assuming you have this entity
-    
-    # Fallback to a default if entities don't exist yet
+
+    # Construct the full, absolute URL for the API endpoint
+    api_url = f"{ingress_entry}/api/data"
+
+    # For the map's initial view
+    lat = get_ha_state('input_number.rain_prediction_latitude')
+    lon = get_ha_state('input_number.rain_prediction_longitude')
     try:
         lat = float(lat)
         lon = float(lon)
@@ -50,7 +52,8 @@ def index():
         lat = -24.98
         lon = 151.86
 
-    return render_template('index.html', latitude=lat, longitude=lon)
+    # Pass all variables to the template
+    return render_template('index.html', latitude=lat, longitude=lon, api_url=api_url)
 
 # --- API Route to Provide Data to the Frontend ---
 @app.route('/api/data')
