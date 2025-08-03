@@ -9,7 +9,9 @@ arch:
   - aarch64
   - amd64
   - i386
-homeassistant_api: true
+api: true
+ingress: true
+panel_icon: mdi:chart-line
 init: false
 startup: services
 services:
