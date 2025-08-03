@@ -9,7 +9,7 @@ arch:
   - aarch64
   - amd64
   - i386
-api: true
+homeassistant_api: true 
 ingress: true
 panel_icon: mdi:weather-lightning-rainy
 init: false
