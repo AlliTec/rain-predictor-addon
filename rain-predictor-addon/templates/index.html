@@ -113,7 +113,10 @@
         // Function to update the data panel
         async function updateDataPanel() {
             try {
-                const response = await fetch('/api/data');
+                const basePath = window.location.pathname.replace(/(\/dashboard-redirect\/|)$/, '');
+                const apiUrl = `${basePath}/api/data`;
+
+                const response = await fetch(apiUrl);
                 const data = await response.json();
 
                 // Time to Rain
