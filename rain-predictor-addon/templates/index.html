@@ -1,592 +1,157 @@
+<!-- /rain-predictor-addon/templates/index.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rain Predictor Configuration</title>
+    <title>Rain Predictor</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        * {
+        body, html {
+            height: 100%;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            font-weight: 300;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            opacity: 0.9;
-            font-size: 1.1rem;
-        }
-
-        .config-form {
-            padding: 40px;
-        }
-
-        .section {
-            margin-bottom: 40px;
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
-            border-left: 4px solid #667eea;
-        }
-
-        .section h2 {
-            color: #2d3748;
-            margin-bottom: 20px;
-            font-size: 1.4rem;
-            font-weight: 600;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-        }
-
-        .form-group {
+            background-color: #1c1c1c;
+            color: #e0e0e0;
+            font-family: Arial, sans-serif;
             display: flex;
             flex-direction: column;
         }
-
-        label {
-            font-weight: 600;
-            color: #4a5568;
-            margin-bottom: 8px;
-            font-size: 0.9rem;
+        #map {
+            flex-grow: 1; /* Map takes up all available space */
         }
-
-        input, select, textarea {
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: white;
+        .leaflet-container {
+            background-color: #1c1c1c;
         }
-
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .help-text {
-            font-size: 0.8rem;
-            color: #718096;
-            margin-top: 5px;
-        }
-
-        .button-group {
+        #data-panel {
+            background-color: #2a2a2a;
+            padding: 10px;
             display: flex;
-            gap: 15px;
-            margin-top: 30px;
-            justify-content: center;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid #444;
+            flex-shrink: 0;
         }
-
-        .btn {
-            padding: 15px 30px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
+        .data-item {
             text-align: center;
-            min-width: 120px;
         }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        .data-value {
+            font-size: 1.5em;
+            font-weight: bold;
         }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-        }
-
-        .btn-secondary {
-            background: #e2e8f0;
-            color: #4a5568;
-        }
-
-        .btn-secondary:hover {
-            background: #cbd5e0;
-            transform: translateY(-1px);
-        }
-
-        .alert {
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
-
-        .alert-success {
-            background: #c6f6d5;
-            color: #276749;
-            border: 1px solid #9ae6b4;
-        }
-
-        .alert-error {
-            background: #fed7d7;
-            color: #c53030;
-            border: 1px solid #feb2b2;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #e2e8f0;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-
-        .status-active {
-            background: #48bb78;
-            box-shadow: 0 0 6px rgba(72, 187, 120, 0.6);
-        }
-
-        .status-inactive {
-            background: #e53e3e;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                margin: 10px;
-                border-radius: 15px;
-            }
-            
-            .header {
-                padding: 20px;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .config-form {
-                padding: 20px;
-            }
-            
-            .section {
-                padding: 20px;
-            }
-            
-            .button-group {
-                flex-direction: column;
-            }
+        .data-label {
+            font-size: 0.8em;
+            color: #aaa;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🌧️ Rain Predictor</h1>
-            <p>Advanced radar-based rain prediction configuration</p>
-            <div style="margin-top: 15px;">
-                <span class="status-indicator status-active"></span>
-                <span>Service Active</span>
-            </div>
+<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}">
+
+    <div id="map"></div>
+    <div id="data-panel">
+        <div class="data-item">
+            <div class="data-value" id="time-to-rain">--</div>
+            <div class="data-label">TIME TO RAIN</div>
         </div>
-
-        <div class="config-form">
-            <div id="alerts"></div>
-            
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Saving configuration...</p>
-            </div>
-
-            <form id="configForm">
-                <!-- Location Settings -->
-                <div class="section">
-                    <h2>📍 Location Settings</h2>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="latitude">Latitude</label>
-                            <input type="number" id="latitude" name="latitude" step="0.000001" required>
-                            <div class="help-text">Decimal degrees (-90 to 90)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="longitude">Longitude</label>
-                            <input type="number" id="longitude" name="longitude" step="0.000001" required>
-                            <div class="help-text">Decimal degrees (-180 to 180)</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Schedule Settings -->
-                <div class="section">
-                    <h2>⏰ Schedule Settings</h2>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="run_interval_minutes">Update Interval (minutes)</label>
-                            <input type="number" id="run_interval_minutes" name="run_interval_minutes" min="1" max="60" required>
-                            <div class="help-text">How often to check for rain (1-60 minutes)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="api_url">Radar API URL</label>
-                            <input type="url" id="api_url" name="api_url" required>
-                            <div class="help-text">RainViewer or compatible API endpoint</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Home Assistant Entities -->
-                <div class="section">
-                    <h2>🏠 Home Assistant Entities</h2>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="entity_time">Time to Rain Entity *</label>
-                            <input type="text" id="entity_time" name="entities.time" required>
-                            <div class="help-text">input_number entity for arrival time (minutes)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="entity_distance">Distance Entity</label>
-                            <input type="text" id="entity_distance" name="entities.distance">
-                            <div class="help-text">input_number entity for distance (km)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="entity_speed">Speed Entity</label>
-                            <input type="text" id="entity_speed" name="entities.speed">
-                            <div class="help-text">input_number entity for cell speed (km/h)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="entity_direction">Direction Entity</label>
-                            <input type="text" id="entity_direction" name="entities.direction">
-                            <div class="help-text">input_number entity for movement direction (degrees)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="entity_bearing">Bearing Entity</label>
-                            <input type="text" id="entity_bearing" name="entities.bearing">
-                            <div class="help-text">input_number entity for bearing to cell (degrees)</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Analysis Settings -->
-                <div class="section">
-                    <h2>🔬 Analysis Settings</h2>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="rain_threshold">Rain Threshold</label>
-                            <input type="number" id="rain_threshold" name="analysis_settings.rain_threshold" min="1" max="255" required>
-                            <div class="help-text">Pixel intensity threshold (1-255)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="arrival_angle_threshold">Arrival Angle Threshold</label>
-                            <input type="number" id="arrival_angle_threshold" name="analysis_settings.arrival_angle_threshold_deg" min="1" max="180" required>
-                            <div class="help-text">Degrees ± for approach detection (1-180)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="lat_range">Latitude Range</label>
-                            <input type="number" id="lat_range" name="analysis_settings.lat_range_deg" step="0.01" min="0.1" max="10" required>
-                            <div class="help-text">Degrees covered by radar image</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="lon_range">Longitude Range</label>
-                            <input type="number" id="lon_range" name="analysis_settings.lon_range_deg" step="0.01" min="0.1" max="10" required>
-                            <div class="help-text">Degrees covered by radar image</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Image Settings -->
-                <div class="section">
-                    <h2>🖼️ Radar Image Settings</h2>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="image_size">Image Size</label>
-                            <select id="image_size" name="image_settings.size" required>
-                                <option value="128">128x128</option>
-                                <option value="256">256x256</option>
-                                <option value="512">512x512</option>
-                            </select>
-                            <div class="help-text">Radar tile resolution</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="image_zoom">Zoom Level</label>
-                            <input type="number" id="image_zoom" name="image_settings.zoom" min="1" max="15" required>
-                            <div class="help-text">Higher = more detail, smaller area</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="color_scheme">Color Scheme</label>
-                            <input type="number" id="color_scheme" name="image_settings.color_scheme" min="0" max="8" required>
-                            <div class="help-text">RainViewer color scheme (0-8)</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="image_options">Image Options</label>
-                            <input type="text" id="image_options" name="image_settings.options" required>
-                            <div class="help-text">Format: "smooth_snow" (0_0, 1_0, etc.)</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Debug Settings -->
-                <div class="section">
-                    <h2>🐛 Debug Settings</h2>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="log_level">Log Level</label>
-                            <select id="log_level" name="debug.log_level" required>
-                                <option value="DEBUG">Debug</option>
-                                <option value="INFO">Info</option>
-                                <option value="WARNING">Warning</option>
-                                <option value="ERROR">Error</option>
-                            </select>
-                            <div class="help-text">Logging verbosity</div>
-                        </div>
-                        <div class="form-group">
-                            <label for="save_images">Save Debug Images</label>
-                            <select id="save_images" name="debug.save_images" required>
-                                <option value="false">No</option>
-                                <option value="true">Yes</option>
-                            </select>
-                            <div class="help-text">Save radar images to /share/rain_predictor_debug/</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="button-group">
-                    <button type="submit" class="btn btn-primary">💾 Save Configuration</button>
-                    <button type="button" class="btn btn-secondary" onclick="loadConfig()">🔄 Reload</button>
-                </div>
-            </form>
+        <div class="data-item">
+            <div class="data-value" id="distance">--</div>
+            <div class="data-label">DISTANCE</div>
+        </div>
+        <div class="data-item">
+            <div class="data-value" id="speed">--</div>
+            <div class="data-label">SPEED</div>
+        </div>
+        <div class="data-item">
+            <div class="data-value" id="direction">--</div>
+            <div class="data-label">DIRECTION</div>
+        </div>
+        <div class="data-item">
+            <div class="data-value" id="bearing">--</div>
+            <div class="data-label">BEARING</div>
         </div>
     </div>
 
     <script>
-        let currentConfig = {};
+        const latitude = document.body.dataset.latitude;
+        const longitude = document.body.dataset.longitude;
+        let radarLayer = null;
 
-        // Load configuration on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadConfig();
-        });
+        // Initialize Leaflet Map
+        const map = L.map('map').setView([latitude, longitude], 8);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+            maxZoom: 19
+        }).addTo(map);
+        
+        // Add a marker for home location
+        L.marker([latitude, longitude]).addTo(map);
 
-        async function loadConfig() {
+        // Function to update the radar overlay
+        async function updateRadarLayer() {
             try {
-                showLoading(true);
-                const response = await fetch('/api/config');
-                const config = await response.json();
-                currentConfig = config;
-                populateForm(config);
-                showAlert('Configuration loaded successfully', 'success');
+                const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+                const data = await response.json();
+                const latestTimestamp = data.radar.past[data.radar.past.length - 1].time;
+                const radarUrl = `${data.host}${data.radar.past[data.radar.past.length - 1].path}/512/{z}/{x}/{y}/2/1_1.png`;
+                
+                if (radarLayer) {
+                    map.removeLayer(radarLayer);
+                }
+
+                radarLayer = L.tileLayer(radarUrl, {
+                    tileSize: 512,
+                    opacity: 0.8
+                }).addTo(map);
+                console.log('Radar layer updated.');
             } catch (error) {
-                showAlert('Error loading configuration: ' + error.message, 'error');
-            } finally {
-                showLoading(false);
+                console.error('Error fetching radar data:', error);
             }
         }
 
-        function populateForm(config) {
-            // Basic fields
-            document.getElementById('latitude').value = config.latitude || '';
-            document.getElementById('longitude').value = config.longitude || '';
-            document.getElementById('run_interval_minutes').value = config.run_interval_minutes || 3;
-            document.getElementById('api_url').value = config.api_url || '';
-
-            // Entities
-            if (config.entities) {
-                document.getElementById('entity_time').value = config.entities.time || '';
-                document.getElementById('entity_distance').value = config.entities.distance || '';
-                document.getElementById('entity_speed').value = config.entities.speed || '';
-                document.getElementById('entity_direction').value = config.entities.direction || '';
-                document.getElementById('entity_bearing').value = config.entities.bearing || '';
-            }
-
-            // Analysis settings
-            if (config.analysis_settings) {
-                document.getElementById('rain_threshold').value = config.analysis_settings.rain_threshold || 75;
-                document.getElementById('arrival_angle_threshold').value = config.analysis_settings.arrival_angle_threshold_deg || 45;
-                document.getElementById('lat_range').value = config.analysis_settings.lat_range_deg || 1.8;
-                document.getElementById('lon_range').value = config.analysis_settings.lon_range_deg || 1.99;
-            }
-
-            // Image settings
-            if (config.image_settings) {
-                document.getElementById('image_size').value = config.image_settings.size || 256;
-                document.getElementById('image_zoom').value = config.image_settings.zoom || 8;
-                document.getElementById('color_scheme').value = config.image_settings.color_scheme || 3;
-                document.getElementById('image_options').value = config.image_settings.options || '0_0';
-            }
-
-            // Debug settings
-            if (config.debug) {
-                document.getElementById('log_level').value = config.debug.log_level || 'INFO';
-                document.getElementById('save_images').value = config.debug.save_images ? 'true' : 'false';
-            }
-        }
-
-        function collectFormData() {
-            return {
-                latitude: parseFloat(document.getElementById('latitude').value),
-                longitude: parseFloat(document.getElementById('longitude').value),
-                run_interval_minutes: parseInt(document.getElementById('run_interval_minutes').value),
-                api_url: document.getElementById('api_url').value,
-                entities: {
-                    time: document.getElementById('entity_time').value,
-                    distance: document.getElementById('entity_distance').value || undefined,
-                    speed: document.getElementById('entity_speed').value || undefined,
-                    direction: document.getElementById('entity_direction').value || undefined,
-                    bearing: document.getElementById('entity_bearing').value || undefined
-                },
-                defaults: currentConfig.defaults || {
-                    no_rain_value: 999,
-                    no_direction_value: -1,
-                    no_bearing_value: -1
-                },
-                image_settings: {
-                    size: parseInt(document.getElementById('image_size').value),
-                    zoom: parseInt(document.getElementById('image_zoom').value),
-                    color_scheme: parseInt(document.getElementById('color_scheme').value),
-                    options: document.getElementById('image_options').value
-                },
-                analysis_settings: {
-                    rain_threshold: parseInt(document.getElementById('rain_threshold').value),
-                    lat_range_deg: parseFloat(document.getElementById('lat_range').value),
-                    lon_range_deg: parseFloat(document.getElementById('lon_range').value),
-                    arrival_angle_threshold_deg: parseFloat(document.getElementById('arrival_angle_threshold').value)
-                },
-                tracking_settings: currentConfig.tracking_settings || {
-                    max_tracking_distance_km: 30,
-                    min_track_length: 2
-                },
-                debug: {
-                    log_level: document.getElementById('log_level').value,
-                    save_images: document.getElementById('save_images').value === 'true'
-                }
-            };
-        }
-
-        // Handle form submission
-        document.getElementById('configForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
+        // Function to update the data panel
+        async function updateDataPanel() {
             try {
-                showLoading(true);
-                const formData = collectFormData();
-                
-                // Validate configuration
-                const validateResponse = await fetch('/api/validate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
-                });
-                
-                const validation = await validateResponse.json();
-                
-                if (!validation.valid) {
-                    showAlert('Configuration validation failed: ' + validation.errors.join(', '), 'error');
-                    return;
-                }
-                
-                // Save configuration
-                const saveResponse = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
-                });
-                
-                const result = await saveResponse.json();
-                
-                if (result.success) {
-                    showAlert('Configuration saved successfully! The addon will restart with new settings.', 'success');
-                    currentConfig = formData;
+                const response = await fetch('/api/data');
+                const data = await response.json();
+
+                // Time to Rain
+                let timeText = data.time_to_rain;
+                if (timeText === '999') {
+                    timeText = "No Rain";
+                } else if (timeText !== null) {
+                    timeText = `${timeText} min`;
                 } else {
-                    showAlert('Error saving configuration: ' + result.message, 'error');
+                    timeText = '--';
                 }
+                document.getElementById('time-to-rain').innerText = timeText;
+
+                // Distance
+                document.getElementById('distance').innerText = data.distance !== null ? `${data.distance} km` : '--';
+                
+                // Speed
+                document.getElementById('speed').innerText = data.speed !== null ? `${data.speed} kph` : '--';
+                
+                // Direction
+                document.getElementById('direction').innerText = data.direction !== null ? `${data.direction}°` : 'N/A';
+                
+                // Bearing
+                document.getElementById('bearing').innerText = data.bearing !== null ? `${data.bearing}°` : 'N/A';
                 
             } catch (error) {
-                showAlert('Error saving configuration: ' + error.message, 'error');
-            } finally {
-                showLoading(false);
+                console.error('Error fetching prediction data:', error);
             }
+        }
+
+        // Run updates on page load and then on intervals
+        document.addEventListener('DOMContentLoaded', () => {
+            updateRadarLayer();
+            updateDataPanel();
+            setInterval(updateRadarLayer, 10 * 60 * 1000); // Update radar every 10 minutes
+            setInterval(updateDataPanel, 5000); // Update data panel every 5 seconds
         });
 
-        function showAlert(message, type) {
-            const alertsContainer = document.getElementById('alerts');
-            const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
-            
-            alertsContainer.innerHTML = `
-                <div class="alert ${alertClass}">
-                    ${message}
-                </div>
-            `;
-            
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                alertsContainer.innerHTML = '';
-            }, 5000);
-        }
-
-        function showLoading(show) {
-            const loading = document.getElementById('loading');
-            const form = document.getElementById('configForm');
-            
-            if (show) {
-                loading.style.display = 'block';
-                form.style.opacity = '0.5';
-                form.style.pointerEvents = 'none';
-            } else {
-                loading.style.display = 'none';
-                form.style.opacity = '1';
-                form.style.pointerEvents = 'auto';
-            }
-        }
     </script>
 </body>
 </html>
