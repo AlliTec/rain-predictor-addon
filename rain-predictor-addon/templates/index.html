@@ -44,7 +44,7 @@
             const mapFrame = document.getElementById('rainviewer-map');
             // We build the URL with your coordinates and some default settings
             // --- THIS IS THE ONLY LINE THAT CHANGES ---
-            const rainviewerUrl = `https://www.rainviewer.com/map.html?loc=${latitude},${longitude},8&o=80&c=2&t=0&z=8&p=1&d=1&f=0&s=1&sm=1&sn=1&m=1`; // <-- Added &m=1 at the end
+            const rainviewerUrl = `https://www.rainviewer.com/map.html?loc=${latitude},${longitude},8&o=80&c=2&t=0&z=8&p=1&d=0&f=0&s=1&sm=1&sn=1&m=1`; // <-- Added &m=1 at the end
             mapFrame.src = rainviewerUrl;
             console.log("RainViewer map URL set with marker.");
         }
