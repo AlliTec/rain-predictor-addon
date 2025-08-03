@@ -74,71 +74,39 @@
     </div>
 
     <script>
-        const latitude = document.body.dataset.latitude;
-        const longitude = document.body.dataset.longitude;
-        let radarLayer = null;
+        let map; // Define map globally so we can initialize it later
 
-        // Initialize Leaflet Map
-        const map = L.map('map').setView([latitude, longitude], 8);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-            maxZoom: 19
-        }).addTo(map);
-        
-        // Add a marker for home location
-        L.marker([latitude, longitude]).addTo(map);
-
-        // Function to update the radar overlay
-        async function updateRadarLayer() {
+        // Function to update the data panel AND initialize/update the map
+        async function updateData() {
             try {
-                const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+                // Use a relative path, which Ingress will handle correctly
+                const response = await fetch('api/data');
                 const data = await response.json();
-                const latestTimestamp = data.radar.past[data.radar.past.length - 1].time;
-                const radarUrl = `${data.host}${data.radar.past[data.radar.past.length - 1].path}/512/{z}/{x}/{y}/2/1_1.png`;
-                
-                if (radarLayer) {
-                    map.removeLayer(radarLayer);
+
+                // --- MAP INITIALIZATION ---
+                // Only initialize the map once, using the first data we get
+                if (!map && data.latitude && data.longitude) {
+                    const lat = parseFloat(data.latitude);
+                    const lon = parseFloat(data.longitude);
+
+                    map = L.map('map').setView([lat, lon], 8);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+                        maxZoom: 19
+                    }).addTo(map);
+                    L.marker([lat, lon]).addTo(map);
                 }
-
-                radarLayer = L.tileLayer(radarUrl, {
-                    tileSize: 512,
-                    opacity: 0.8
-                }).addTo(map);
-                console.log('Radar layer updated.');
-            } catch (error) {
-                console.error('Error fetching radar data:', error);
-            }
-        }
-
-        // Function to update the data panel
-        async function updateDataPanel() {
-            try {
-                const apiUrl = '{{ api_url }}';
                 
-                const response = await fetch(apiUrl);
-                const data = await response.json();
-
-                // Time to Rain
+                // --- DATA PANEL UPDATE ---
                 let timeText = data.time_to_rain;
-                if (timeText === '999') {
-                    timeText = "No Rain";
-                } else if (timeText !== null) {
-                    timeText = `${timeText} min`;
-                } else {
-                    timeText = '--';
-                }
+                if (timeText === '999') timeText = "No Rain";
+                else if (timeText !== null) timeText = `${timeText} min`;
+                else timeText = '--';
                 document.getElementById('time-to-rain').innerText = timeText;
 
-                // Distance
                 document.getElementById('distance').innerText = data.distance !== null ? `${data.distance} km` : '--';
-                
-                // Speed
                 document.getElementById('speed').innerText = data.speed !== null ? `${data.speed} kph` : '--';
-                
-                // Direction
                 document.getElementById('direction').innerText = data.direction !== null ? `${data.direction}°` : 'N/A';
-                
-                // Bearing
                 document.getElementById('bearing').innerText = data.bearing !== null ? `${data.bearing}°` : 'N/A';
                 
             } catch (error) {
@@ -146,14 +114,30 @@
             }
         }
 
+        // Other functions (like updateRadarLayer) remain the same...
+        let radarLayer = null;
+        async function updateRadarLayer() {
+            try {
+                const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+                const data = await response.json();
+                const radarUrl = `${data.host}${data.radar.past[data.radar.past.length - 1].path}/512/{z}/{x}/{y}/2/1_1.png`;
+                if (map) { // Only add layer if map exists
+                    if (radarLayer) map.removeLayer(radarLayer);
+                    radarLayer = L.tileLayer(radarUrl, { tileSize: 512, opacity: 0.8 }).addTo(map);
+                    console.log('Radar layer updated.');
+                }
+            } catch (error) {
+                console.error('Error fetching radar data:', error);
+            }
+        }
+
         // Run updates on page load and then on intervals
         document.addEventListener('DOMContentLoaded', () => {
+            updateData(); // Initial call
             updateRadarLayer();
-            updateDataPanel();
+            setInterval(updateData, 5000); // Update data every 5 seconds
             setInterval(updateRadarLayer, 10 * 60 * 1000); // Update radar every 10 minutes
-            setInterval(updateDataPanel, 5000); // Update data panel every 5 seconds
         });
-
     </script>
-</body>
+    </body>
 </html>
