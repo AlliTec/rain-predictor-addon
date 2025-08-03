@@ -35,15 +35,23 @@ def get_all_data():
     }
 
 @app.route('/')
+# In web_ui.py
+@app.route('/')
 def index():
-    """Render the main web UI page, embedding initial data."""
+    """Render the main web UI page."""
+    # Get the unique Ingress path from the environment
     ingress_entry = os.environ.get('INGRESS_ENTRY', '')
-    initial_data = get_all_data()
 
-    # Pass the Ingress path and all data (as a JSON string) to the template.
-    return render_template('index.html', 
-                           ingress_entry=ingress_entry, 
-                           initial_data_json=json.dumps(initial_data))
+    # THIS IS THE KEY: Construct the full, absolute URL for the API endpoint
+    api_url = f"{ingress_entry}/api/data"
+
+    # Get initial values for the map so it loads correctly
+    # Use defaults if the API call fails initially to prevent errors
+    lat = get_ha_state('input_number.rain_prediction_latitude', -24.98)
+    lon = get_ha_state('input_number.rain_prediction_longitude', 151.86)
+    
+    # Pass all variables to the template
+    return render_template('index.html', latitude=lat, longitude=lon, api_url=api_url)
 
 @app.route('/api/data')
 def api_data():

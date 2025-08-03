@@ -1,14 +1,9 @@
-<!-- /rain-predictor-addon/templates/index.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rain Predictor</title>
-    <!-- THIS IS THE CRITICAL FIX FOR THE 404 ERRORS -->
-    <base href="{{ ingress_entry }}/">
-
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -21,7 +16,8 @@
         .data-label { font-size: 0.8em; color: #aaa; }
     </style>
 </head>
-<body>
+<!-- Pass data from backend to frontend using data-* attributes to avoid linter errors -->
+<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}" data-api-url="{{ api_url | safe }}">
 
     <div id="map"></div>
     <div id="data-panel">
@@ -33,21 +29,20 @@
     </div>
 
     <script>
-        // THIS IS THE CRITICAL FIX FOR THE MAP LOCATION
-        // We parse the data embedded directly into the page by the Python backend.
-        const initialData = JSON.parse('{{ initial_data_json | tojson | safe }}');
-        
-        const latitude = parseFloat(initialData.latitude);
-        const longitude = parseFloat(initialData.longitude);
+        // --- READ DATA FROM THE BODY TAG ---
+        // This is the guaranteed way to stop the fake editor errors.
+        const latitude = parseFloat(document.body.dataset.latitude);
+        const longitude = parseFloat(document.body.dataset.longitude);
+        const apiUrl = document.body.dataset.apiUrl;
         let radarLayer = null;
 
-        // Initialize Leaflet Map
+        // --- MAP INITIALIZATION ---
         const map = L.map('map').setView([latitude, longitude], 8);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
         }).addTo(map);
         L.marker([latitude, longitude]).addTo(map);
-
+        
         function updateDataDisplay(data) {
             let timeText = data.time_to_rain;
             if (timeText === '999') timeText = "No Rain";
@@ -63,12 +58,15 @@
 
         async function fetchAndUpdateData() {
             try {
-                // Now this relative path works because of the <base> tag
-                const response = await fetch('api/data');
+                const response = await fetch(apiUrl); 
+                if (!response.ok) {
+                    console.error(`API request failed with status: ${response.status}`);
+                    return; 
+                }
                 const data = await response.json();
                 updateDataDisplay(data);
             } catch (error) {
-                console.error('Error fetching prediction data:', error);
+                console.error('Error fetching or parsing prediction data:', error);
             }
         }
 
@@ -87,9 +85,9 @@
             }
         }
 
-        // Run updates on page load and then on intervals
+        // --- LIFECYCLE ---
         document.addEventListener('DOMContentLoaded', () => {
-            updateDataDisplay(initialData); // Use the embedded data for the first load
+            fetchAndUpdateData(); 
             updateRadarLayer();
             setInterval(fetchAndUpdateData, 5000);
             setInterval(updateRadarLayer, 10 * 60 * 1000);
