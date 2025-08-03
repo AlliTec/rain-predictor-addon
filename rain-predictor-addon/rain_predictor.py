@@ -19,15 +19,6 @@ from math import radians, cos, sin, asin, sqrt, atan2, degrees
 import threading
 import signal
 
-# Get the Supervisor token from the environment variable
-SUPERVISOR_TOKEN = os.environ.get('SUPERVISOR_TOKEN')
-
-# Create the headers dictionary that will be used in all API calls
-AUTH_HEADERS = {
-    'Authorization': f'Bearer {SUPERVISOR_TOKEN}',
-    'Content-Type': 'application/json',
-}
-
 class AddonConfig:
     """Load and manage addon configuration"""
     
