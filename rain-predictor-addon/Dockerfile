@@ -17,7 +17,7 @@ RUN apk add --no-cache \
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt /tmp/
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
 
 # Copy addon files
 COPY run.sh /
@@ -40,5 +40,6 @@ LABEL \
   io.hass.arch="armhf|aarch64|amd64|armv7|i386" \
   io.hass.type="addon" \
   io.hass.version="1.0.0"
+
 
 CMD [ "/run.sh" ]
