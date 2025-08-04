@@ -63,17 +63,7 @@ def get_all_data():
 def index():
     lat = get_ha_state('input_number.rain_prediction_latitude', -24.98)
     lon = get_ha_state('input_number.rain_prediction_longitude', 151.86)
-    
-    # For ingress, we need to use the current request's base URL
-    # This ensures we're calling the same addon that served the page
-    base_url = request.url_root.rstrip('/')
-    
-    logging.info(f"Request URL root: {base_url}")
-    
-    return render_template('index.html', 
-                         latitude=lat, 
-                         longitude=lon, 
-                         base_url=base_url)
+    return render_template('index.html', latitude=lat, longitude=lon)
 
 @app.route('/api/data')
 def api_data():

@@ -161,9 +161,7 @@
         }
     </style>
 </head>
-<body data-latitude="{{ latitude }}" 
-      data-longitude="{{ longitude }}" 
-      data-base-url="{{ base_url | safe }}">
+<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}">
 
     <div id="map"></div>
     <button class="control-btn" id="save-location-btn">Save Location</button>
@@ -211,9 +209,12 @@
     <script>
         const latitude = parseFloat(document.body.dataset.latitude);
         const longitude = parseFloat(document.body.dataset.longitude);
-        const baseUrl = document.body.dataset.baseUrl;
 
-        // Construct API URLs using the base URL
+        // Use the current page's origin and pathname to construct correct API URLs
+        const currentUrl = window.location.href;
+        const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, '');
+
+        // Construct API URLs using the current page's base
         const apiDataUrl = `${baseUrl}/api/data`;
         const apiSetLocationUrl = `${baseUrl}/api/set_location`;
         const apiUpdateConfigUrl = `${baseUrl}/api/update_config`;
@@ -228,8 +229,13 @@
         let baseLayer;
         let locationMarker;
 
+        console.log('Current URL:', currentUrl);
         console.log('Base URL:', baseUrl);
-        console.log('API URLs:', { data: apiDataUrl, setLocation: apiSetLocationUrl, updateConfig: apiUpdateConfigUrl });
+        console.log('API URLs:', { 
+            data: apiDataUrl, 
+            setLocation: apiSetLocationUrl, 
+            updateConfig: apiUpdateConfigUrl 
+        });
 
         function initializeMap() {
             map = L.map('map', {
@@ -281,24 +287,35 @@
             saveBtn.disabled = true;
 
             console.log('Saving location to URL:', apiSetLocationUrl);
+            console.log('Sending data:', { latitude: newPos.lat, longitude: newPos.lng });
 
             try {
                 const response = await fetch(apiSetLocationUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({
                         latitude: newPos.lat,
                         longitude: newPos.lng
                     })
                 });
 
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorText = await response.text();
+                    console.log('Error response text:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`);
                 }
 
                 const result = await response.json();
+                console.log('Success response:', result);
 
                 if (result.status === 'success') {
+                    // Also update the addon config (optional)
                     fetch(apiUpdateConfigUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -306,9 +323,12 @@
                     }).catch(err => console.log('Config update failed:', err));
 
                     saveBtn.textContent = '✓ Saved!';
+                    saveBtn.style.background = '#48bb78';
+                    
                     setTimeout(() => {
                         saveBtn.style.display = 'none';
                         saveBtn.textContent = 'Save Location';
+                        saveBtn.style.background = '#48bb78';
                         saveBtn.disabled = false;
                     }, 2000);
 
@@ -318,9 +338,11 @@
                     throw new Error(result.message || 'Failed to save location');
                 }
             } catch (error) {
-                console.error('Error saving location:', error);
+                console.error('Detailed error saving location:', error);
+                
                 saveBtn.textContent = '✗ Error';
                 saveBtn.style.background = '#e53e3e';
+                
                 setTimeout(() => {
                     saveBtn.textContent = 'Save Location';
                     saveBtn.style.background = '#48bb78';
@@ -492,6 +514,7 @@
 
         async function fetchAndUpdateData() {
             try {
+                console.log('Fetching data from:', apiDataUrl);
                 const response = await fetch(apiDataUrl);
                 if (!response.ok) {
                     console.error(`API request failed with status: ${response.status}`);
