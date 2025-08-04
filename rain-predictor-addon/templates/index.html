@@ -218,7 +218,6 @@
         const latitude = parseFloat(document.body.dataset.latitude);
         const longitude = parseFloat(document.body.dataset.longitude);
         const apiUrl = document.body.dataset.apiUrl;
-        const baseApiUrl = document.body.dataset.baseApiUrl;
 
         let map;
         let radarLayers = [];
@@ -226,9 +225,9 @@
         let animating = true;
         let animationTimer;
         let radarData = [];
-        let currentColorScheme = 2; // Default: Original colors
-        let baseLayer; // Store reference to base map layer
-        let locationMarker; // Declare the location marker variable
+        let currentColorScheme = 2;
+        let baseLayer;
+        let locationMarker;
 
         // Initialize the map
         function initializeMap() {
@@ -276,7 +275,7 @@
             loadRadarData();
         }
 
-        // NEW: Function to save the new location
+        // FIXED: Function to save the new location using relative URLs
         async function saveLocation() {
             if (!locationMarker) return;
 
@@ -287,12 +286,11 @@
             saveBtn.textContent = 'Saving...';
             saveBtn.disabled = true;
 
-            // Construct the correct URL for the set_location endpoint
-            const setLocationUrl = `${baseApiUrl}/set_location`;
-            const configUrl = `${baseApiUrl}/update_config`;
+            console.log('Saving location:', newPos.lat, newPos.lng);
 
             try {
-                const response = await fetch(setLocationUrl, {
+                // Use relative URL since we're calling from the same addon
+                const response = await fetch('/api/set_location', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -303,16 +301,20 @@
                     })
                 });
 
+                console.log('Response status:', response.status);
+
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorText = await response.text();
+                    console.log('Error response:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
                 }
 
                 const result = await response.json();
+                console.log('Success response:', result);
 
                 if (result.status === 'success') {
                     // Also update the addon config (optional)
-                    const configUrl = apiUrl.replace('/api/data', '/api/update_config');
-                    fetch(configUrl, {
+                    fetch('/api/update_config', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ latitude: newPos.lat, longitude: newPos.lng })
@@ -530,7 +532,7 @@
 
         async function fetchAndUpdateData() {
             try {
-                const response = await fetch(apiUrl); 
+                const response = await fetch('/api/data'); // Use relative URL
                 if (!response.ok) {
                     console.error(`API request failed with status: ${response.status}`);
                     return; 
