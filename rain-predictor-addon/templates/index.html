@@ -134,6 +134,17 @@
             height: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
+
+        #save-location-btn {
+            background: #48bb78; /* A green color */
+            color: white;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: none; /* Hidden by default */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <!-- Pass data from backend to frontend using data-* attributes -->
@@ -141,6 +152,8 @@
 
     <!-- Custom map using RainViewer API -->
     <div id="map"></div>
+
+    <button class="control-btn" id="save-location-btn">Save Location</button>
 
     <div id="data-panel">
         <div class="data-item"><div class="data-value" id="time-to-rain">--</div><div class="data-label">TIME TO RAIN</div></div>
@@ -221,6 +234,14 @@
                 iconAnchor: [10, 10]
             });
 
+            locationMarker = L.marker([latitude, longitude], { 
+                icon: locationIcon,
+                draggable: true // <-- Make it draggable
+            })
+            .addTo(map)
+            .bindPopup('Your Location')
+            .openPopup();
+            
             L.marker([latitude, longitude], { icon: locationIcon })
                 .addTo(map)
                 .bindPopup('Your Location')
@@ -446,6 +467,10 @@
                         changeMapStyle(this.value);
                     });
                 }
+                    // This shows the save button when you start dragging the marker
+                locationMarker.on('dragstart', function() {
+                    document.getElementById('save-location-btn').style.display = 'block';
+                });
             }, 3000); // Wait 3 seconds for map to fully initialize
             
             // Refresh radar data every 10 minutes
