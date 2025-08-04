@@ -286,8 +286,11 @@
             saveBtn.textContent = 'Saving...';
             saveBtn.disabled = true;
 
+            // Construct the correct URL for the set_location endpoint
+            const setLocationUrl = apiUrl.replace('/api/data', '/api/set_location');
+
             try {
-                const response = await fetch('/api/set_location', {
+                const response = await fetch(setLocationUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -298,9 +301,21 @@
                     })
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const result = await response.json();
 
-                if (response.ok && result.status === 'success') {
+                if (result.status === 'success') {
+                    // Also update the addon config (optional)
+                    const configUrl = apiUrl.replace('/api/data', '/api/update_config');
+                    fetch(configUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ latitude: newPos.lat, longitude: newPos.lng })
+                    }).catch(err => console.log('Config update failed:', err));
+
                     // Success feedback
                     saveBtn.textContent = '✓ Saved!';
                     saveBtn.style.background = '#48bb78';
