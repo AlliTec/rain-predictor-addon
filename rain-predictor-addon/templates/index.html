@@ -572,49 +572,89 @@
             const nextPosition = (animationPosition + 1) % radarLayers.length;
             nextLayer = radarLayers[nextPosition];
             
-            // Add next layer at 0 opacity
+            // CRITICAL: Pre-load the next layer completely before starting transition
+            nextLayer.setOpacity(0);
+            
+            // Add next layer to map if not already there
             if (!map.hasLayer(nextLayer)) {
                 nextLayer.addTo(map);
             }
-            nextLayer.setOpacity(0);
             
-            // Smooth crossfade using requestAnimationFrame for 60fps
-            const startTime = performance.now();
-            const transitionDuration = 300; // 300ms transition
+            // Wait for tiles to load completely before starting transition
+            let tilesLoaded = false;
+            let loadTimeout;
             
-            function animateTransition(currentTime) {
-                const elapsed = currentTime - startTime;
-                const progress = Math.min(elapsed / transitionDuration, 1);
+            const startTransition = () => {
+                if (tilesLoaded) return; // Prevent double execution
+                tilesLoaded = true;
+                clearTimeout(loadTimeout);
                 
-                // Use easing function for smoother transition
-                const easedProgress = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+                // Now both layers are on the map - start smooth crossfade
+                const startTime = performance.now();
+                const transitionDuration = 400; // Longer transition for smoother effect
                 
-                if (activeLayer && map.hasLayer(activeLayer)) {
-                    activeLayer.setOpacity(0.6 * (1 - easedProgress));
-                }
-                
-                if (nextLayer && map.hasLayer(nextLayer)) {
-                    nextLayer.setOpacity(0.6 * easedProgress);
-                }
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateTransition);
-                } else {
-                    // Transition complete
+                function animateTransition(currentTime) {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / transitionDuration, 1);
+                    
+                    // Smooth easing
+                    const easedProgress = 1 - Math.pow(1 - progress, 2);
+                    
+                    // Crossfade: old fades out while new fades in simultaneously
                     if (activeLayer && map.hasLayer(activeLayer)) {
-                        map.removeLayer(activeLayer);
+                        activeLayer.setOpacity(0.6 * (1 - easedProgress));
                     }
                     
-                    activeLayer = nextLayer;
-                    nextLayer = null;
-                    animationPosition = nextPosition;
-                    isTransitioning = false;
+                    if (nextLayer && map.hasLayer(nextLayer)) {
+                        nextLayer.setOpacity(0.6 * easedProgress);
+                    }
                     
-                    updateTimeDisplay();
+                    if (progress < 1) {
+                        requestAnimationFrame(animateTransition);
+                    } else {
+                        // Transition complete - clean up old layer
+                        if (activeLayer && activeLayer !== nextLayer && map.hasLayer(activeLayer)) {
+                            map.removeLayer(activeLayer);
+                        }
+                        
+                        activeLayer = nextLayer;
+                        nextLayer = null;
+                        animationPosition = nextPosition;
+                        isTransitioning = false;
+                        
+                        updateTimeDisplay();
+                    }
                 }
-            }
+                
+                requestAnimationFrame(animateTransition);
+            };
             
-            requestAnimationFrame(animateTransition);
+            // Listen for tile load events
+            const onTileLoad = () => {
+                nextLayer.off('tileload', onTileLoad);
+                nextLayer.off('tileerror', onTileLoad);
+                startTransition();
+            };
+            
+            nextLayer.on('tileload', onTileLoad);
+            nextLayer.on('tileerror', onTileLoad);
+            
+            // Fallback timeout in case tiles don't trigger events
+            loadTimeout = setTimeout(() => {
+                nextLayer.off('tileload', onTileLoad);
+                nextLayer.off('tileerror', onTileLoad);
+                startTransition();
+            }, 500);
+            
+            // Force tile loading by setting a minimal opacity change
+            setTimeout(() => {
+                if (map.hasLayer(nextLayer)) {
+                    nextLayer.setOpacity(0.001);
+                    setTimeout(() => {
+                        nextLayer.setOpacity(0);
+                    }, 10);
+                }
+            }, 50);
         }
 
         function toggleAnimation() {
