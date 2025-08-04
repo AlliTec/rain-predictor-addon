@@ -340,8 +340,35 @@
             }));
         }
 
-        // Get current location (saved or default)
+        // Function to get saved settings or use defaults
+        function getSavedSettings() {
+            const saved = localStorage.getItem('rainPredictor_settings');
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch (e) {
+                    console.error('Error parsing saved settings:', e);
+                }
+            }
+            
+            // Default settings
+            return {
+                colorScheme: 2,
+                mapStyle: 'light'
+            };
+        }
+
+        // Function to save settings permanently
+        function saveSettings(colorScheme, mapStyle) {
+            localStorage.setItem('rainPredictor_settings', JSON.stringify({
+                colorScheme: colorScheme || currentColorScheme,
+                mapStyle: mapStyle || 'light'
+            }));
+        }
+
+        // Get current location and settings (saved or default)
         const currentLocation = getSavedLocation();
+        const currentSettings = getSavedSettings();
         const latitude = currentLocation.latitude;
         const longitude = currentLocation.longitude;
 
@@ -360,7 +387,7 @@
         let animating = true;
         let animationTimer;
         let radarData = [];
-        let currentColorScheme = 2;
+        let currentColorScheme = currentSettings.colorScheme;
         let baseLayer;
         let locationMarker;
         
@@ -406,11 +433,8 @@
                 attributionControl: false
             });
 
-            baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: '© OpenStreetMap contributors, © CARTO',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(map);
+            // Apply saved map style
+            changeMapStyle(currentSettings.mapStyle);
 
             const locationIcon = L.divIcon({
                 className: 'location-marker',
@@ -694,6 +718,9 @@
             
             currentColorScheme = colorScheme;
             
+            // Save the setting
+            saveSettings(colorScheme, null);
+            
             // Store current state
             const wasAnimating = animating;
             const currentPos = animationPosition;
@@ -741,9 +768,13 @@
         }
 
         function changeMapStyle(style) {
-            if (!map || !baseLayer) return;
+            if (!map) return;
             
-            if (map.hasLayer(baseLayer)) {
+            // Save the setting
+            const savedSettings = getSavedSettings();
+            saveSettings(savedSettings.colorScheme, style);
+            
+            if (baseLayer && map.hasLayer(baseLayer)) {
                 map.removeLayer(baseLayer);
             }
             
@@ -786,16 +817,44 @@
         }
 
         function updateDataDisplay(data) {
-            let timeText = data.time_to_rain;
-            if (timeText === '999') timeText = "No Rain";
-            else if (timeText !== null && timeText !== '--') timeText = `${timeText} min`;
-            else timeText = '--';
+            // Handle time to rain
+            let timeText = '--';
+            if (data.time_to_rain !== null && data.time_to_rain !== undefined && data.time_to_rain !== '--') {
+                if (data.time_to_rain === '999' || data.time_to_rain === 999) {
+                    timeText = "No Rain";
+                } else {
+                    timeText = `${data.time_to_rain} min`;
+                }
+            }
             document.getElementById('time-to-rain').innerText = timeText;
 
-            document.getElementById('distance').innerText = data.distance !== null && data.distance !== '--' ? `${data.distance} km` : '--';
-            document.getElementById('speed').innerText = data.speed !== null && data.speed !== '--' ? `${data.speed} kph` : '--';
-            document.getElementById('direction').innerText = data.direction !== null && data.direction !== 'N/A' ? `${data.direction}°` : 'N/A';
-            document.getElementById('bearing').innerText = data.bearing !== null && data.bearing !== 'N/A' ? `${data.bearing}°` : 'N/A';
+            // Handle distance
+            let distanceText = '--';
+            if (data.distance !== null && data.distance !== undefined && data.distance !== '--' && data.distance !== 'N/A') {
+                distanceText = `${data.distance} km`;
+            }
+            document.getElementById('distance').innerText = distanceText;
+
+            // Handle speed
+            let speedText = '--';
+            if (data.speed !== null && data.speed !== undefined && data.speed !== '--' && data.speed !== 'N/A') {
+                speedText = `${data.speed} kph`;
+            }
+            document.getElementById('speed').innerText = speedText;
+
+            // Handle direction
+            let directionText = '--';
+            if (data.direction !== null && data.direction !== undefined && data.direction !== '--' && data.direction !== 'N/A') {
+                directionText = `${data.direction}°`;
+            }
+            document.getElementById('direction').innerText = directionText;
+
+            // Handle bearing
+            let bearingText = '--';
+            if (data.bearing !== null && data.bearing !== undefined && data.bearing !== '--' && data.bearing !== 'N/A') {
+                bearingText = `${data.bearing}°`;
+            }
+            document.getElementById('bearing').innerText = bearingText;
         }
 
         async function fetchAndUpdateData() {
@@ -860,6 +919,9 @@
                 // Color scheme dropdown
                 const colorSchemeSelect = document.getElementById('color-scheme');
                 if (colorSchemeSelect) {
+                    // Set saved value
+                    colorSchemeSelect.value = currentSettings.colorScheme;
+                    
                     colorSchemeSelect.addEventListener('change', function() {
                         changeColorScheme(parseInt(this.value));
                     });
@@ -868,6 +930,9 @@
                 // Map style dropdown
                 const mapStyleSelect = document.getElementById('map-style');
                 if (mapStyleSelect) {
+                    // Set saved value
+                    mapStyleSelect.value = currentSettings.mapStyle;
+                    
                     mapStyleSelect.addEventListener('change', function() {
                         changeMapStyle(this.value);
                     });
