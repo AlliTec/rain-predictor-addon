@@ -826,17 +826,20 @@ function updateDataDisplay(data) {
                        value !== 'N/A' && 
                        value !== 'null' &&
                        !isNaN(value) &&
-                       value !== 0; // Assuming 0 means no tracking
+                       value !== 0 &&
+                       value !== '0' &&
+                       value !== 999 &&
+                       value !== '999' &&
+                       value !== 999.0 &&
+                       value !== '999.0' &&
+                       parseFloat(value) !== 999 &&
+                       parseFloat(value) !== 999.0; // 999 values mean no tracking/no data
             }
 
-            // Handle time to rain
+            // Handle time to rain - 999 means no rain predicted, should show --
             let timeText = '--';
-            if (data && data.time_to_rain !== null && data.time_to_rain !== undefined && data.time_to_rain !== '--') {
-                if (data.time_to_rain === '999' || data.time_to_rain === 999) {
-                    timeText = "999.0 min";
-                } else if (isValidValue(data.time_to_rain)) {
-                    timeText = `${data.time_to_rain} min`;
-                }
+            if (data && isValidValue(data.time_to_rain)) {
+                timeText = `${data.time_to_rain} min`;
             }
             document.getElementById('time-to-rain').innerText = timeText;
 
