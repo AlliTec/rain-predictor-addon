@@ -56,11 +56,11 @@
             color: #aaa; 
         }
 
-        /* Enhanced collapsible animation controls */
+        /* Enhanced collapsible animation controls - moved to left side */
         .animation-controls {
             position: absolute;
             top: 10px;
-            right: 80px; /* Moved to right side, with space for save button */
+            left: 60px; /* Positioned just to the right of zoom controls */
             background: rgba(255, 255, 255, 0.3);
             border-radius: 8px;
             z-index: 1000;
@@ -269,7 +269,7 @@
         <div class="data-item"><div class="data-value" id="bearing">--</div><div class="data-label">BEARING</div></div>
     </div>
 
-    <!-- Enhanced collapsible animation controls -->
+    <!-- Enhanced collapsible animation controls - moved to left side -->
     <div class="animation-controls collapsed" id="animation-controls">
         <!-- Header for collapsed state -->
         <div class="controls-header">
@@ -314,8 +314,36 @@
     </div>
 
     <script>
-        const latitude = parseFloat(document.body.dataset.latitude);
-        const longitude = parseFloat(document.body.dataset.longitude);
+        // Function to get saved location or use default
+        function getSavedLocation() {
+            const saved = localStorage.getItem('rainPredictor_location');
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch (e) {
+                    console.error('Error parsing saved location:', e);
+                }
+            }
+            
+            // Fallback to body data attributes
+            return {
+                latitude: parseFloat(document.body.dataset.latitude),
+                longitude: parseFloat(document.body.dataset.longitude)
+            };
+        }
+
+        // Function to save location permanently
+        function saveLocationToStorage(lat, lng) {
+            localStorage.setItem('rainPredictor_location', JSON.stringify({
+                latitude: lat,
+                longitude: lng
+            }));
+        }
+
+        // Get current location (saved or default)
+        const currentLocation = getSavedLocation();
+        const latitude = currentLocation.latitude;
+        const longitude = currentLocation.longitude;
 
         // Use the current page's origin and pathname to construct correct API URLs
         const currentUrl = window.location.href;
@@ -338,6 +366,7 @@
 
         console.log('Current URL:', currentUrl);
         console.log('Base URL:', baseUrl);
+        console.log('Using location:', { latitude, longitude });
         console.log('API URLs:', { 
             data: apiDataUrl, 
             setLocation: apiSetLocationUrl, 
@@ -417,6 +446,10 @@
             console.log('Sending data:', { latitude: newPos.lat, longitude: newPos.lng });
 
             try {
+                // Save to localStorage first for immediate persistence
+                saveLocationToStorage(newPos.lat, newPos.lng);
+                console.log('Location saved to localStorage');
+
                 const response = await fetch(apiSetLocationUrl, {
                     method: 'POST',
                     headers: { 
@@ -459,7 +492,7 @@
                         saveBtn.disabled = false;
                     }, 2000);
 
-                    locationMarker.bindPopup(`Location Updated<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
+                    locationMarker.bindPopup(`Location Updated & Saved<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
                     setTimeout(fetchAndUpdateData, 1000);
                 } else {
                     throw new Error(result.message || 'Failed to save location');
@@ -467,14 +500,18 @@
             } catch (error) {
                 console.error('Detailed error saving location:', error);
                 
-                saveBtn.textContent = '✗ Error';
-                saveBtn.style.background = '#e53e3e';
+                // Location is still saved locally even if API fails
+                saveBtn.textContent = '✓ Saved Locally';
+                saveBtn.style.background = '#f6ad55'; // Orange for partial success
                 
                 setTimeout(() => {
+                    saveBtn.style.display = 'none';
                     saveBtn.textContent = 'Save Location';
                     saveBtn.style.background = '#48bb78';
                     saveBtn.disabled = false;
                 }, 3000);
+
+                locationMarker.bindPopup(`Location Saved Locally<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}<br><small>(API update failed)</small>`).openPopup();
             }
         }
 
