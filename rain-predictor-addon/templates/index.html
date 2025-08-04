@@ -816,13 +816,25 @@
             baseLayer.addTo(map);
         }
 
-        function updateDataDisplay(data) {
+function updateDataDisplay(data) {
+            // Helper function to check if a value is valid/trackable
+            function isValidValue(value) {
+                return value !== null && 
+                       value !== undefined && 
+                       value !== '' && 
+                       value !== '--' && 
+                       value !== 'N/A' && 
+                       value !== 'null' &&
+                       !isNaN(value) &&
+                       value !== 0; // Assuming 0 means no tracking
+            }
+
             // Handle time to rain
             let timeText = '--';
-            if (data.time_to_rain !== null && data.time_to_rain !== undefined && data.time_to_rain !== '--') {
+            if (data && data.time_to_rain !== null && data.time_to_rain !== undefined && data.time_to_rain !== '--') {
                 if (data.time_to_rain === '999' || data.time_to_rain === 999) {
-                    timeText = "No Rain";
-                } else {
+                    timeText = "999.0 min";
+                } else if (isValidValue(data.time_to_rain)) {
                     timeText = `${data.time_to_rain} min`;
                 }
             }
@@ -830,28 +842,28 @@
 
             // Handle distance
             let distanceText = '--';
-            if (data.distance !== null && data.distance !== undefined && data.distance !== '--' && data.distance !== 'N/A') {
+            if (data && isValidValue(data.distance)) {
                 distanceText = `${data.distance} km`;
             }
             document.getElementById('distance').innerText = distanceText;
 
             // Handle speed
             let speedText = '--';
-            if (data.speed !== null && data.speed !== undefined && data.speed !== '--' && data.speed !== 'N/A') {
+            if (data && isValidValue(data.speed)) {
                 speedText = `${data.speed} kph`;
             }
             document.getElementById('speed').innerText = speedText;
 
             // Handle direction
             let directionText = '--';
-            if (data.direction !== null && data.direction !== undefined && data.direction !== '--' && data.direction !== 'N/A') {
+            if (data && isValidValue(data.direction)) {
                 directionText = `${data.direction}°`;
             }
             document.getElementById('direction').innerText = directionText;
 
             // Handle bearing
             let bearingText = '--';
-            if (data.bearing !== null && data.bearing !== undefined && data.bearing !== '--' && data.bearing !== 'N/A') {
+            if (data && isValidValue(data.bearing)) {
                 bearingText = `${data.bearing}°`;
             }
             document.getElementById('bearing').innerText = bearingText;
