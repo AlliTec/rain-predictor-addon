@@ -64,12 +64,26 @@ def get_all_data():
 
 @app.route('/')
 def index():
+    # Get the ingress entry point
     ingress_entry = os.environ.get('INGRESS_ENTRY', '')
-    api_url = f"{ingress_entry}/api/data"
-    base_api_url = f"{ingress_entry}/api"
+    
+    # Build proper API URLs with ingress path
+    api_data_url = f"{ingress_entry}/api/data"
+    api_set_location_url = f"{ingress_entry}/api/set_location"
+    api_update_config_url = f"{ingress_entry}/api/update_config"
+    
     lat = get_ha_state('input_number.rain_prediction_latitude', -24.98)
     lon = get_ha_state('input_number.rain_prediction_longitude', 151.86)
-    return render_template('index.html', latitude=lat, longitude=lon, api_url=api_url, base_api_url=base_api_url)
+    
+    logging.info(f"Ingress entry: {ingress_entry}")
+    logging.info(f"API URLs: data={api_data_url}, set_location={api_set_location_url}")
+    
+    return render_template('index.html', 
+                         latitude=lat, 
+                         longitude=lon, 
+                         api_data_url=api_data_url,
+                         api_set_location_url=api_set_location_url,
+                         api_update_config_url=api_update_config_url)
 
 @app.route('/api/data')
 def api_data():
@@ -79,8 +93,10 @@ def api_data():
 @app.route('/api/set_location', methods=['POST'])
 def set_location():
     """Receives new coordinates and updates Home Assistant entities."""
+    logging.info("set_location endpoint called")
     data = request.get_json()
     if not data or 'latitude' not in data or 'longitude' not in data:
+        logging.error(f"Invalid data received: {data}")
         return jsonify({"status": "error", "message": "Invalid data"}), 400
 
     lat = data['latitude']
@@ -93,14 +109,17 @@ def set_location():
     lon_success = ha_api.call_service('input_number/set_value', 'input_number.rain_prediction_longitude', lon)
 
     if lat_success and lon_success:
+        logging.info("Successfully updated Home Assistant entities")
         return jsonify({"status": "success", "message": "Location updated"})
     else:
+        logging.error("Failed to update Home Assistant entities")
         return jsonify({"status": "error", "message": "Failed to update Home Assistant entities"}), 500
 
 # OPTIONAL: Update addon configuration with new coordinates
 @app.route('/api/update_config', methods=['POST'])
 def update_config():
     """Updates the addon configuration with new coordinates."""
+    logging.info("update_config endpoint called")
     data = request.get_json()
     if not data or 'latitude' not in data or 'longitude' not in data:
         return jsonify({"status": "error", "message": "Invalid data"}), 400

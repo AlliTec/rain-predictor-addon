@@ -166,7 +166,11 @@
     </style>
 </head>
 <!-- Pass data from backend to frontend using data-* attributes -->
-<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}" data-api-url="{{ api_url | safe }}" data-base-api-url="{{ base_api_url | safe }}">
+<body data-latitude="{{ latitude }}" 
+      data-longitude="{{ longitude }}" 
+      data-api-data-url="{{ api_data_url | safe }}"
+      data-api-set-location-url="{{ api_set_location_url | safe }}"
+      data-api-update-config-url="{{ api_update_config_url | safe }}">
 
     <!-- Custom map using RainViewer API -->
     <div id="map"></div>
@@ -217,7 +221,9 @@
     <script>
         const latitude = parseFloat(document.body.dataset.latitude);
         const longitude = parseFloat(document.body.dataset.longitude);
-        const apiUrl = document.body.dataset.apiUrl;
+        const apiDataUrl = document.body.dataset.apiDataUrl;
+        const apiSetLocationUrl = document.body.dataset.apiSetLocationUrl;
+        const apiUpdateConfigUrl = document.body.dataset.apiUpdateConfigUrl;
 
         let map;
         let radarLayers = [];
@@ -228,6 +234,12 @@
         let currentColorScheme = 2;
         let baseLayer;
         let locationMarker;
+
+        console.log('API URLs:', {
+            data: apiDataUrl,
+            setLocation: apiSetLocationUrl,
+            updateConfig: apiUpdateConfigUrl
+        });
 
         // Initialize the map
         function initializeMap() {
@@ -246,7 +258,7 @@
                 maxZoom: 20
             }).addTo(map);
 
-            // Add location marker (FIXED: Only create one marker)
+            // Add location marker
             const locationIcon = L.divIcon({
                 className: 'location-marker',
                 iconSize: [20, 20],
@@ -275,7 +287,7 @@
             loadRadarData();
         }
 
-        // FIXED: Function to save the new location using relative URLs
+        // Function to save the new location
         async function saveLocation() {
             if (!locationMarker) return;
 
@@ -286,11 +298,11 @@
             saveBtn.textContent = 'Saving...';
             saveBtn.disabled = true;
 
+            console.log('Saving location to URL:', apiSetLocationUrl);
             console.log('Saving location:', newPos.lat, newPos.lng);
 
             try {
-                // Use relative URL since we're calling from the same addon
-                const response = await fetch('/api/set_location', {
+                const response = await fetch(apiSetLocationUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -314,7 +326,7 @@
 
                 if (result.status === 'success') {
                     // Also update the addon config (optional)
-                    fetch('/api/update_config', {
+                    fetch(apiUpdateConfigUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ latitude: newPos.lat, longitude: newPos.lng })
@@ -532,7 +544,8 @@
 
         async function fetchAndUpdateData() {
             try {
-                const response = await fetch('/api/data'); // Use relative URL
+                console.log('Fetching data from:', apiDataUrl);
+                const response = await fetch(apiDataUrl);
                 if (!response.ok) {
                     console.error(`API request failed with status: ${response.status}`);
                     return; 
@@ -574,13 +587,13 @@
                     });
                 }
 
-                // NEW: Save location button event listener
+                // Save location button event listener
                 const saveLocationBtn = document.getElementById('save-location-btn');
                 if (saveLocationBtn) {
                     saveLocationBtn.addEventListener('click', saveLocation);
                 }
                 
-            }, 1000); // Wait 1 second for map to fully initialize
+            }, 1000);
             
             // Refresh radar data every 10 minutes
             setInterval(function() {
