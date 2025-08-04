@@ -136,14 +136,32 @@
         }
 
         #save-location-btn {
-            background: #48bb78; /* A green color */
+            background: #48bb78;
             color: white;
             position: absolute;
             top: 10px;
             right: 10px;
             z-index: 1000;
-            display: none; /* Hidden by default */
+            display: none;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        #save-location-btn:hover {
+            background: #38a169;
+            transform: translateY(-1px);
+        }
+
+        #save-location-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
     </style>
 </head>
@@ -209,6 +227,7 @@
         let radarData = [];
         let currentColorScheme = 2; // Default: Original colors
         let baseLayer; // Store reference to base map layer
+        let locationMarker; // Declare the location marker variable
 
         // Initialize the map
         function initializeMap() {
@@ -227,7 +246,7 @@
                 maxZoom: 20
             }).addTo(map);
 
-            // Add location marker
+            // Add location marker (FIXED: Only create one marker)
             const locationIcon = L.divIcon({
                 className: 'location-marker',
                 iconSize: [20, 20],
@@ -236,19 +255,87 @@
 
             locationMarker = L.marker([latitude, longitude], { 
                 icon: locationIcon,
-                draggable: true // <-- Make it draggable
+                draggable: true
             })
             .addTo(map)
-            .bindPopup('Your Location')
+            .bindPopup('Your Location (Drag to move)')
             .openPopup();
-            
-            L.marker([latitude, longitude], { icon: locationIcon })
-                .addTo(map)
-                .bindPopup('Your Location')
-                .openPopup();
+
+            // Event listeners for the marker
+            locationMarker.on('dragstart', function() {
+                document.getElementById('save-location-btn').style.display = 'block';
+            });
+
+            locationMarker.on('dragend', function() {
+                const newPos = locationMarker.getLatLng();
+                console.log('Marker moved to:', newPos.lat, newPos.lng);
+            });
 
             // Load radar data
             loadRadarData();
+        }
+
+        // NEW: Function to save the new location
+        async function saveLocation() {
+            if (!locationMarker) return;
+
+            const newPos = locationMarker.getLatLng();
+            const saveBtn = document.getElementById('save-location-btn');
+            
+            // Show loading state
+            saveBtn.textContent = 'Saving...';
+            saveBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/set_location', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        latitude: newPos.lat,
+                        longitude: newPos.lng
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    // Success feedback
+                    saveBtn.textContent = '✓ Saved!';
+                    saveBtn.style.background = '#48bb78';
+                    
+                    // Hide button after 2 seconds
+                    setTimeout(() => {
+                        saveBtn.style.display = 'none';
+                        saveBtn.textContent = 'Save Location';
+                        saveBtn.style.background = '#48bb78';
+                        saveBtn.disabled = false;
+                    }, 2000);
+
+                    // Update popup text
+                    locationMarker.bindPopup(`Location Updated<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
+                    
+                    // Refresh data with new location
+                    setTimeout(fetchAndUpdateData, 1000);
+                    
+                } else {
+                    throw new Error(result.message || 'Failed to save location');
+                }
+            } catch (error) {
+                console.error('Error saving location:', error);
+                
+                // Error feedback
+                saveBtn.textContent = '✗ Error';
+                saveBtn.style.background = '#e53e3e';
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    saveBtn.textContent = 'Save Location';
+                    saveBtn.style.background = '#48bb78';
+                    saveBtn.disabled = false;
+                }, 3000);
+            }
         }
 
         // Load radar data from RainViewer API
@@ -467,11 +554,14 @@
                         changeMapStyle(this.value);
                     });
                 }
-                    // This shows the save button when you start dragging the marker
-                locationMarker.on('dragstart', function() {
-                    document.getElementById('save-location-btn').style.display = 'block';
-                });
-            }, 3000); // Wait 3 seconds for map to fully initialize
+
+                // NEW: Save location button event listener
+                const saveLocationBtn = document.getElementById('save-location-btn');
+                if (saveLocationBtn) {
+                    saveLocationBtn.addEventListener('click', saveLocation);
+                }
+                
+            }, 1000); // Wait 1 second for map to fully initialize
             
             // Refresh radar data every 10 minutes
             setInterval(function() {

@@ -2,7 +2,6 @@
 
 import os
 import json
-# --- ADD 'request' TO THIS IMPORT LINE ---
 from flask import Flask, render_template, jsonify, request
 import requests
 import logging
@@ -40,12 +39,9 @@ class HomeAssistantAPI:
 ha_api = HomeAssistantAPI()
 
 def get_ha_state(entity_id, default=None):
-    # This function remains the same
-    # ... (no changes needed here)
-    # ...
-    # For brevity, I'm omitting the full function, but it should be here.
     token = os.environ.get('SUPERVISOR_TOKEN')
-    if not token: return default
+    if not token: 
+        return default
     headers = {"Authorization": f"Bearer {token}"}
     url = f"http://supervisor/core/api/states/{entity_id}"
     try:
@@ -56,8 +52,6 @@ def get_ha_state(entity_id, default=None):
         return default
         
 def get_all_data():
-    # ... (no changes needed here)
-    # ...
     return {
         'time_to_rain': get_ha_state('input_number.rain_arrival_minutes', '--'),
         'distance': get_ha_state('input_number.rain_prediction_distance', '--'),
@@ -70,8 +64,6 @@ def get_all_data():
 
 @app.route('/')
 def index():
-    # ... (no changes needed here)
-    # ...
     ingress_entry = os.environ.get('INGRESS_ENTRY', '')
     api_url = f"{ingress_entry}/api/data"
     lat = get_ha_state('input_number.rain_prediction_latitude', -24.98)
@@ -82,7 +74,7 @@ def index():
 def api_data():
     return jsonify(get_all_data())
 
-# --- THIS IS THE NEW API ENDPOINT ---
+# NEW API ENDPOINT - Receives new coordinates and updates Home Assistant entities
 @app.route('/api/set_location', methods=['POST'])
 def set_location():
     """Receives new coordinates and updates Home Assistant entities."""
@@ -96,13 +88,48 @@ def set_location():
     logging.info(f"Received new location: Lat={lat}, Lon={lon}")
 
     # Call the service to update the input_number entities
-    lat_success = ha_api.call_service('input_number.set_value', 'input_number.rain_prediction_latitude', lat)
-    lon_success = ha_api.call_service('input_number.set_value', 'input_number.rain_prediction_longitude', lon)
+    lat_success = ha_api.call_service('input_number/set_value', 'input_number.rain_prediction_latitude', lat)
+    lon_success = ha_api.call_service('input_number/set_value', 'input_number.rain_prediction_longitude', lon)
 
     if lat_success and lon_success:
         return jsonify({"status": "success", "message": "Location updated"})
     else:
         return jsonify({"status": "error", "message": "Failed to update Home Assistant entities"}), 500
+
+# OPTIONAL: Update addon configuration with new coordinates
+@app.route('/api/update_config', methods=['POST'])
+def update_config():
+    """Updates the addon configuration with new coordinates."""
+    data = request.get_json()
+    if not data or 'latitude' not in data or 'longitude' not in data:
+        return jsonify({"status": "error", "message": "Invalid data"}), 400
+
+    lat = data['latitude']
+    lon = data['longitude']
+
+    try:
+        # Read current config
+        config_path = '/data/options.json'
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        else:
+            config = {}
+
+        # Update coordinates
+        config['latitude'] = lat
+        config['longitude'] = lon
+
+        # Write back config
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+
+        logging.info(f"Updated addon config with new location: Lat={lat}, Lon={lon}")
+        return jsonify({"status": "success", "message": "Config updated"})
+
+    except Exception as e:
+        logging.error(f"Failed to update config: {e}")
+        return jsonify({"status": "error", "message": "Failed to update config"}), 500
 
 @app.route('/health')
 def health_check():
