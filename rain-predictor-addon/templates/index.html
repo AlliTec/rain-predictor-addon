@@ -21,11 +21,19 @@
 
         // Change radar color scheme
         function changeColorScheme(colorScheme) {
+            console.log('changeColorScheme called with:', colorScheme);
             currentColorScheme = colorScheme;
+            
+            if (radarLayers.length === 0) {
+                console.log('No radar layers to update yet');
+                return;
+            }
             
             // Remove all current radar layers
             radarLayers.forEach(function(layer) {
-                map.removeLayer(layer);
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
             });
             radarLayers = [];
             
@@ -43,11 +51,15 @@
                     radarLayer.addTo(map);
                 }
             });
+            
+            console.log('Color scheme updated, layers recreated');
         }
 
         // Change map base layer
         function changeMapStyle(style) {
-            if (baseLayer) {
+            console.log('changeMapStyle called with:', style);
+            
+            if (baseLayer && map.hasLayer(baseLayer)) {
                 map.removeLayer(baseLayer);
             }
             
@@ -87,6 +99,7 @@
             }
             
             baseLayer.addTo(map);
+            console.log('Map style updated to:', style);
         }
         
         #map {
@@ -414,16 +427,18 @@
         // Event listeners
         document.getElementById('play-pause-btn').addEventListener('click', toggleAnimation);
         
-        document.getElementById('color-scheme').addEventListener('change', (e) => {
+        document.getElementById('color-scheme').addEventListener('change', function(e) {
+            console.log('Color scheme changed to:', e.target.value);
             changeColorScheme(parseInt(e.target.value));
         });
         
-        document.getElementById('map-style').addEventListener('change', (e) => {
+        document.getElementById('map-style').addEventListener('change', function(e) {
+            console.log('Map style changed to:', e.target.value);
             changeMapStyle(e.target.value);
         });
 
         // Initialize everything when page loads
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', function() {
             initializeMap();
             fetchAndUpdateData();
             setInterval(fetchAndUpdateData, 5000); // Update data panel every 5 seconds
@@ -436,6 +451,31 @@
                 radarLayers = [];
                 loadRadarData();
             }, 600000);
+            
+            // Set up event listeners after DOM is ready
+            setTimeout(function() {
+                const colorSchemeSelect = document.getElementById('color-scheme');
+                const mapStyleSelect = document.getElementById('map-style');
+                
+                if (colorSchemeSelect) {
+                    colorSchemeSelect.addEventListener('change', function(e) {
+                        console.log('Color scheme changed to:', e.target.value);
+                        changeColorScheme(parseInt(e.target.value));
+                    });
+                }
+                
+                if (mapStyleSelect) {
+                    mapStyleSelect.addEventListener('change', function(e) {
+                        console.log('Map style changed to:', e.target.value);
+                        changeMapStyle(e.target.value);
+                    });
+                }
+                
+                const playPauseBtn = document.getElementById('play-pause-btn');
+                if (playPauseBtn) {
+                    playPauseBtn.addEventListener('click', toggleAnimation);
+                }
+            }, 1000);
         });
     </script>
 </body>
