@@ -816,27 +816,29 @@
             baseLayer.addTo(map);
         }
 
-function updateDataDisplay(data) {
+        function updateDataDisplay(data) {
             // Helper function to check if a value is valid/trackable
             function isValidValue(value) {
-                return value !== null && 
-                       value !== undefined && 
-                       value !== '' && 
-                       value !== '--' && 
-                       value !== 'N/A' && 
-                       value !== 'null' &&
-                       !isNaN(value) &&
-                       value !== 0 &&
-                       value !== '0' &&
-                       value !== 999 &&
-                       value !== '999' &&
-                       value !== 999.0 &&
-                       value !== '999.0' &&
-                       parseFloat(value) !== 999 &&
-                       parseFloat(value) !== 999.0; // 999 values mean no tracking/no data
+                if (value === null || value === undefined || value === '' || value === '--' || value === 'N/A' || value === 'null') {
+                    return false;
+                }
+                
+                const numValue = parseFloat(value);
+                if (isNaN(numValue)) {
+                    return false;
+                }
+                
+                // These values indicate no tracking/no data
+                if (numValue === 0 || numValue === -1 || numValue === -1.0 || numValue === 999 || numValue === 999.0) {
+                    return false;
+                }
+                
+                // For angles (direction/bearing), accept 0-360, but we already filtered out 0 above as "no data"
+                // For other metrics, only positive values are valid
+                return numValue > 0;
             }
 
-            // Handle time to rain - 999 means no rain predicted, should show --
+            // Handle time to rain
             let timeText = '--';
             if (data && isValidValue(data.time_to_rain)) {
                 timeText = `${data.time_to_rain} min`;
