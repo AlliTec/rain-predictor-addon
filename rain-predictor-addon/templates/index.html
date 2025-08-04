@@ -237,13 +237,13 @@
     <div class="animation-controls">
         <div class="control-section">
             <span class="control-label">Animation</span>
-            <button class="control-btn" id="play-pause-btn">⏸️</button>
+            <button class="control-btn" id="play-pause-btn" onclick="toggleAnimation()">⏸️</button>
             <div class="time-display" id="time-display">Loading...</div>
         </div>
         
         <div class="control-section">
             <label class="control-label" for="color-scheme">Radar Colors</label>
-            <select class="color-select" id="color-scheme">
+            <select class="color-select" id="color-scheme" onchange="changeColorScheme(parseInt(this.value))">
                 <option value="2">Original (Blue-Green-Yellow-Red)</option>
                 <option value="0">Universal Blue</option>
                 <option value="1">TITAN</option>
@@ -257,7 +257,7 @@
         
         <div class="control-section">
             <label class="control-label" for="map-style">Map Style</label>
-            <select class="color-select" id="map-style">
+            <select class="color-select" id="map-style" onchange="changeMapStyle(this.value)">
                 <option value="light">Light</option>
                 <option value="standard">Standard</option>
                 <option value="satellite">Satellite</option>
@@ -396,7 +396,10 @@
             }
         }
 
-        // Data panel functions (same as before)
+        // Make functions globally accessible
+        window.changeColorScheme = changeColorScheme;
+        window.changeMapStyle = changeMapStyle;
+        window.toggleAnimation = toggleAnimation;
         function updateDataDisplay(data) {
             let timeText = data.time_to_rain;
             if (timeText === '999') timeText = "No Rain";
@@ -439,9 +442,10 @@
 
         // Initialize everything when page loads
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing...');
             initializeMap();
             fetchAndUpdateData();
-            setInterval(fetchAndUpdateData, 5000); // Update data panel every 5 seconds
+            setInterval(fetchAndUpdateData, 5000);
             
             // Refresh radar data every 10 minutes
             setInterval(function() {
@@ -451,31 +455,48 @@
                 radarLayers = [];
                 loadRadarData();
             }, 600000);
+        });
+
+        // Set up event listeners after a short delay to ensure elements are ready
+        window.addEventListener('load', function() {
+            console.log('Window loaded, setting up controls...');
             
-            // Set up event listeners after DOM is ready
             setTimeout(function() {
                 const colorSchemeSelect = document.getElementById('color-scheme');
                 const mapStyleSelect = document.getElementById('map-style');
+                const playPauseBtn = document.getElementById('play-pause-btn');
+                
+                console.log('Control elements found:', {
+                    colorScheme: !!colorSchemeSelect,
+                    mapStyle: !!mapStyleSelect,
+                    playPause: !!playPauseBtn
+                });
                 
                 if (colorSchemeSelect) {
-                    colorSchemeSelect.addEventListener('change', function(e) {
-                        console.log('Color scheme changed to:', e.target.value);
-                        changeColorScheme(parseInt(e.target.value));
-                    });
+                    colorSchemeSelect.onchange = function() {
+                        const value = parseInt(this.value);
+                        console.log('Color scheme changing to:', value);
+                        changeColorScheme(value);
+                    };
                 }
                 
                 if (mapStyleSelect) {
-                    mapStyleSelect.addEventListener('change', function(e) {
-                        console.log('Map style changed to:', e.target.value);
-                        changeMapStyle(e.target.value);
-                    });
+                    mapStyleSelect.onchange = function() {
+                        const value = this.value;
+                        console.log('Map style changing to:', value);
+                        changeMapStyle(value);
+                    };
                 }
                 
-                const playPauseBtn = document.getElementById('play-pause-btn');
                 if (playPauseBtn) {
-                    playPauseBtn.addEventListener('click', toggleAnimation);
+                    playPauseBtn.onclick = function() {
+                        console.log('Play/pause clicked');
+                        toggleAnimation();
+                    };
                 }
-            }, 1000);
+                
+                console.log('Event listeners attached successfully');
+            }, 2000);
         });
     </script>
 </body>
