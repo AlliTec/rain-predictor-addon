@@ -4,26 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rain Predictor</title>
-    <!-- We no longer need Leaflet.js -->
     <style>
-        body, html { height: 100%; margin: 0; padding: 0; background-color: #1c1c1c; color: #e0e0e0; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
-        /* The iframe will contain the map */
+        body, html { 
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #1c1c1c; 
+            color: #e0e0e0; 
+            font-family: Arial, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
         #rainviewer-map {
             width: 100%;
             height: 100%;
-            border: none; /* Remove the default iframe border */
+            border: none;
             flex-grow: 1;
         }
-        #data-panel { background-color: #2a2a2a; padding: 10px; display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #444; flex-shrink: 0; }
-        .data-item { text-align: center; }
-        .data-value { font-size: 1.5em; font-weight: bold; }
-        .data-label { font-size: 0.8em; color: #aaa; }
+        
+        #data-panel { 
+            background-color: #2a2a2a; 
+            padding: 10px; 
+            display: flex; 
+            justify-content: space-around; 
+            align-items: center; 
+            border-top: 1px solid #444; 
+            flex-shrink: 0; 
+        }
+        
+        .data-item { 
+            text-align: center; 
+        }
+        
+        .data-value { 
+            font-size: 1.5em; 
+            font-weight: bold; 
+        }
+        
+        .data-label { 
+            font-size: 0.8em; 
+            color: #aaa; 
+        }
     </style>
 </head>
 <!-- Pass data from backend to frontend using data-* attributes -->
 <body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}" data-api-url="{{ api_url | safe }}">
 
-    <!-- We now use an iframe instead of a div for the map -->
+    <!-- RainViewer iframe -->
     <iframe id="rainviewer-map" allowfullscreen></iframe>
 
     <div id="data-panel">
@@ -39,14 +67,26 @@
         const longitude = parseFloat(document.body.dataset.longitude);
         const apiUrl = document.body.dataset.apiUrl;
 
-        // --- NEW FUNCTION TO BUILD AND SET THE IFRAME URL ---
+        // Alternative approach - try RainViewer widget embed
         function updateRainViewerMap() {
             const mapFrame = document.getElementById('rainviewer-map');
-            // We build the URL with your coordinates and some default settings
-            // --- THIS IS THE ONLY LINE THAT CHANGES ---
-            const rainviewerUrl = `https://www.rainviewer.com/map.html?loc=${latitude},${longitude},10&lm=0&o=85&c=1&p=1&t=1&s=1&m=1&z=10`; // <-- Added &m=1 at the end
+            
+            // Try the widget embed approach first
+            let rainviewerUrl = `https://www.rainviewer.com/widget/map.html?lat=${latitude}&lng=${longitude}&zoom=10&autoplay=true&marker=true&colors=1&opacity=85`;
+            
+            // Fallback to regular embed if widget doesn't work
+            // const rainviewerUrl = `https://www.rainviewer.com/map.html?embed=1&loc=${latitude},${longitude},10&o=85&c=1&autoplay=1&marker=${latitude},${longitude}&z=10`;
+            
             mapFrame.src = rainviewerUrl;
-            console.log("RainViewer map URL set with marker.");
+            console.log("RainViewer map URL set:", rainviewerUrl);
+            
+            // If the widget approach doesn't work after 5 seconds, try the fallback
+            setTimeout(() => {
+                if (!mapFrame.contentWindow || mapFrame.contentWindow.location.href === 'about:blank') {
+                    console.log("Trying fallback URL...");
+                    mapFrame.src = `https://www.rainviewer.com/map.html?embed=1&loc=${latitude},${longitude},10&o=85&c=1&autoplay=1&marker=${latitude},${longitude}&z=10`;
+                }
+            }, 5000);
         }
         
         function updateDataDisplay(data) {
