@@ -21,6 +21,21 @@
             height: 100%;
             border: none;
             flex-grow: 1;
+            /* Try to hide any overlay elements */
+            overflow: hidden;
+        }
+        
+        /* Additional CSS to try to hide RainViewer UI elements */
+        #rainviewer-map::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: transparent;
+            pointer-events: none;
+            z-index: 1000;
         }
         
         #data-panel { 
@@ -67,26 +82,34 @@
         const longitude = parseFloat(document.body.dataset.longitude);
         const apiUrl = document.body.dataset.apiUrl;
 
-        // Alternative approach - try RainViewer widget embed
+        // Correct RainViewer parameters based on actual documentation
         function updateRainViewerMap() {
             const mapFrame = document.getElementById('rainviewer-map');
             
-            // Try the widget embed approach first
-            let rainviewerUrl = `https://www.rainviewer.com/widget/map.html?lat=${latitude}&lng=${longitude}&zoom=10&autoplay=true&marker=true&colors=1&opacity=85`;
-            
-            // Fallback to regular embed if widget doesn't work
-            // const rainviewerUrl = `https://www.rainviewer.com/map.html?embed=1&loc=${latitude},${longitude},10&o=85&c=1&autoplay=1&marker=${latitude},${longitude}&z=10`;
+            // Correct RainViewer URL parameters:
+            // loc = latitude,longitude,zoom (location and zoom)
+            // p = 1 (play animation)
+            // t = 1 (show time controls) 
+            // s = 1 (smooth animation)
+            // c = 1 (color scheme)
+            // o = 85 (opacity)
+            // lm = 1 (light mode - try this instead of lm=0)
+            // m = 1 (show marker)
+            const rainviewerUrl = `https://www.rainviewer.com/map.html?loc=${latitude},${longitude},10&p=1&t=1&s=1&c=1&o=85&m=1&lm=1`;
             
             mapFrame.src = rainviewerUrl;
             console.log("RainViewer map URL set:", rainviewerUrl);
             
-            // If the widget approach doesn't work after 5 seconds, try the fallback
-            setTimeout(() => {
-                if (!mapFrame.contentWindow || mapFrame.contentWindow.location.href === 'about:blank') {
-                    console.log("Trying fallback URL...");
-                    mapFrame.src = `https://www.rainviewer.com/map.html?embed=1&loc=${latitude},${longitude},10&o=85&c=1&autoplay=1&marker=${latitude},${longitude}&z=10`;
+            // Auto-start animation after map loads
+            mapFrame.onload = function() {
+                console.log("Map loaded, attempting to start animation...");
+                // Try to trigger play via postMessage if available
+                try {
+                    mapFrame.contentWindow.postMessage({action: 'play'}, '*');
+                } catch(e) {
+                    console.log("Could not send play message to map frame");
                 }
-            }, 5000);
+            };
         }
         
         function updateDataDisplay(data) {
