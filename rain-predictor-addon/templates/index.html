@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rain Predictor</title>
-    <!-- Leaflet CSS and JS for map functionality -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <style>
@@ -27,7 +26,6 @@
             background-color: #2d3748;
         }
         
-        /* Fix for Leaflet CSS compatibility */
         .leaflet-container {
             font-family: inherit;
         }
@@ -58,7 +56,6 @@
             color: #aaa; 
         }
 
-        /* Animation and color controls */
         .animation-controls {
             position: absolute;
             top: 10px;
@@ -125,7 +122,6 @@
             text-align: center;
         }
 
-        /* Custom marker styles */
         .location-marker {
             background: #ff4444;
             border: 3px solid white;
@@ -165,16 +161,11 @@
         }
     </style>
 </head>
-<!-- Pass data from backend to frontend using data-* attributes -->
 <body data-latitude="{{ latitude }}" 
       data-longitude="{{ longitude }}" 
-      data-api-data-url="{{ api_data_url | safe }}"
-      data-api-set-location-url="{{ api_set_location_url | safe }}"
-      data-api-update-config-url="{{ api_update_config_url | safe }}">
+      data-base-url="{{ base_url | safe }}">
 
-    <!-- Custom map using RainViewer API -->
     <div id="map"></div>
-
     <button class="control-btn" id="save-location-btn">Save Location</button>
 
     <div id="data-panel">
@@ -185,7 +176,6 @@
         <div class="data-item"><div class="data-value" id="bearing">--</div><div class="data-label">BEARING</div></div>
     </div>
 
-    <!-- Animation and color controls -->
     <div class="animation-controls">
         <div class="control-section">
             <span class="control-label">Animation</span>
@@ -221,9 +211,12 @@
     <script>
         const latitude = parseFloat(document.body.dataset.latitude);
         const longitude = parseFloat(document.body.dataset.longitude);
-        const apiDataUrl = document.body.dataset.apiDataUrl;
-        const apiSetLocationUrl = document.body.dataset.apiSetLocationUrl;
-        const apiUpdateConfigUrl = document.body.dataset.apiUpdateConfigUrl;
+        const baseUrl = document.body.dataset.baseUrl;
+
+        // Construct API URLs using the base URL
+        const apiDataUrl = `${baseUrl}/api/data`;
+        const apiSetLocationUrl = `${baseUrl}/api/set_location`;
+        const apiUpdateConfigUrl = `${baseUrl}/api/update_config`;
 
         let map;
         let radarLayers = [];
@@ -235,15 +228,10 @@
         let baseLayer;
         let locationMarker;
 
-        console.log('API URLs:', {
-            data: apiDataUrl,
-            setLocation: apiSetLocationUrl,
-            updateConfig: apiUpdateConfigUrl
-        });
+        console.log('Base URL:', baseUrl);
+        console.log('API URLs:', { data: apiDataUrl, setLocation: apiSetLocationUrl, updateConfig: apiUpdateConfigUrl });
 
-        // Initialize the map
         function initializeMap() {
-            // Create map centered on location
             map = L.map('map', {
                 center: [latitude, longitude],
                 zoom: 10,
@@ -251,14 +239,12 @@
                 attributionControl: false
             });
 
-            // Add lighter tile layer (default: Light CartoDB)
             baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                 attribution: '© OpenStreetMap contributors, © CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             }).addTo(map);
 
-            // Add location marker
             const locationIcon = L.divIcon({
                 className: 'location-marker',
                 iconSize: [20, 20],
@@ -273,7 +259,6 @@
             .bindPopup('Your Location (Drag to move)')
             .openPopup();
 
-            // Event listeners for the marker
             locationMarker.on('dragstart', function() {
                 document.getElementById('save-location-btn').style.display = 'block';
             });
@@ -283,84 +268,59 @@
                 console.log('Marker moved to:', newPos.lat, newPos.lng);
             });
 
-            // Load radar data
             loadRadarData();
         }
 
-        // Function to save the new location
         async function saveLocation() {
             if (!locationMarker) return;
 
             const newPos = locationMarker.getLatLng();
             const saveBtn = document.getElementById('save-location-btn');
             
-            // Show loading state
             saveBtn.textContent = 'Saving...';
             saveBtn.disabled = true;
 
             console.log('Saving location to URL:', apiSetLocationUrl);
-            console.log('Saving location:', newPos.lat, newPos.lng);
 
             try {
                 const response = await fetch(apiSetLocationUrl, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         latitude: newPos.lat,
                         longitude: newPos.lng
                     })
                 });
 
-                console.log('Response status:', response.status);
-
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.log('Error response:', errorText);
-                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
                 const result = await response.json();
-                console.log('Success response:', result);
 
                 if (result.status === 'success') {
-                    // Also update the addon config (optional)
                     fetch(apiUpdateConfigUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ latitude: newPos.lat, longitude: newPos.lng })
                     }).catch(err => console.log('Config update failed:', err));
 
-                    // Success feedback
                     saveBtn.textContent = '✓ Saved!';
-                    saveBtn.style.background = '#48bb78';
-                    
-                    // Hide button after 2 seconds
                     setTimeout(() => {
                         saveBtn.style.display = 'none';
                         saveBtn.textContent = 'Save Location';
-                        saveBtn.style.background = '#48bb78';
                         saveBtn.disabled = false;
                     }, 2000);
 
-                    // Update popup text
                     locationMarker.bindPopup(`Location Updated<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
-                    
-                    // Refresh data with new location
                     setTimeout(fetchAndUpdateData, 1000);
-                    
                 } else {
                     throw new Error(result.message || 'Failed to save location');
                 }
             } catch (error) {
                 console.error('Error saving location:', error);
-                
-                // Error feedback
                 saveBtn.textContent = '✗ Error';
                 saveBtn.style.background = '#e53e3e';
-                
-                // Reset button after 3 seconds
                 setTimeout(() => {
                     saveBtn.textContent = 'Save Location';
                     saveBtn.style.background = '#48bb78';
@@ -369,7 +329,6 @@
             }
         }
 
-        // Load radar data from RainViewer API
         async function loadRadarData() {
             try {
                 const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
@@ -377,7 +336,6 @@
                 
                 radarData = data.radar.past.concat(data.radar.nowcast);
                 
-                // Add all radar layers (initially hidden) - using current color scheme
                 radarData.forEach(function(frame, index) {
                     const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${currentColorScheme}/1_1.png`, {
                         tileSize: 256,
@@ -392,7 +350,6 @@
                     }
                 });
 
-                // Start animation
                 updateTimeDisplay();
                 startAnimation();
                 
@@ -402,28 +359,24 @@
             }
         }
 
-        // Animation functions
         function startAnimation() {
             if (animationTimer) clearInterval(animationTimer);
             
             animationTimer = setInterval(function() {
                 if (animating && radarLayers.length > 0) {
-                    // Hide current layer
                     if (radarLayers[animationPosition]) {
                         map.removeLayer(radarLayers[animationPosition]);
                     }
                     
-                    // Move to next frame
                     animationPosition = (animationPosition + 1) % radarLayers.length;
                     
-                    // Show next layer
                     if (radarLayers[animationPosition]) {
                         radarLayers[animationPosition].addTo(map);
                     }
                     
                     updateTimeDisplay();
                 }
-            }, 500); // 500ms between frames
+            }, 500);
         }
 
         function toggleAnimation() {
@@ -452,13 +405,11 @@
             }
         }
 
-        // Change radar color scheme
         function changeColorScheme(colorScheme) {
             if (!map || radarLayers.length === 0) return;
             
             currentColorScheme = colorScheme;
             
-            // Remove all current radar layers
             radarLayers.forEach(function(layer) {
                 if (map.hasLayer(layer)) {
                     map.removeLayer(layer);
@@ -466,7 +417,6 @@
             });
             radarLayers = [];
             
-            // Recreate layers with new color scheme
             radarData.forEach(function(frame, index) {
                 const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`, {
                     tileSize: 256,
@@ -482,7 +432,6 @@
             });
         }
 
-        // Change map base layer
         function changeMapStyle(style) {
             if (!map || !baseLayer) return;
             
@@ -528,7 +477,6 @@
             baseLayer.addTo(map);
         }
 
-        // Data panel functions
         function updateDataDisplay(data) {
             let timeText = data.time_to_rain;
             if (timeText === '999') timeText = "No Rain";
@@ -544,7 +492,6 @@
 
         async function fetchAndUpdateData() {
             try {
-                console.log('Fetching data from:', apiDataUrl);
                 const response = await fetch(apiDataUrl);
                 if (!response.ok) {
                     console.error(`API request failed with status: ${response.status}`);
@@ -557,21 +504,17 @@
             }
         }
 
-        // Initialize everything when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initializeMap();
             fetchAndUpdateData();
             setInterval(fetchAndUpdateData, 5000);
             
-            // Set up event listeners after map is initialized
             setTimeout(function() {
-                // Play/pause button
                 const playPauseBtn = document.getElementById('play-pause-btn');
                 if (playPauseBtn) {
                     playPauseBtn.addEventListener('click', toggleAnimation);
                 }
                 
-                // Color scheme dropdown
                 const colorSchemeSelect = document.getElementById('color-scheme');
                 if (colorSchemeSelect) {
                     colorSchemeSelect.addEventListener('change', function() {
@@ -579,7 +522,6 @@
                     });
                 }
                 
-                // Map style dropdown
                 const mapStyleSelect = document.getElementById('map-style');
                 if (mapStyleSelect) {
                     mapStyleSelect.addEventListener('change', function() {
@@ -587,7 +529,6 @@
                     });
                 }
 
-                // Save location button event listener
                 const saveLocationBtn = document.getElementById('save-location-btn');
                 if (saveLocationBtn) {
                     saveLocationBtn.addEventListener('click', saveLocation);
@@ -595,7 +536,6 @@
                 
             }, 1000);
             
-            // Refresh radar data every 10 minutes
             setInterval(function() {
                 radarLayers.forEach(function(layer) {
                     if (map.hasLayer(layer)) {
