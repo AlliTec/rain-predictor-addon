@@ -363,6 +363,11 @@
         let currentColorScheme = 2;
         let baseLayer;
         let locationMarker;
+        
+        // Dual layer system for smooth transitions
+        let activeLayer = null;
+        let nextLayer = null;
+        let isTransitioning = false;
 
         console.log('Current URL:', currentUrl);
         console.log('Base URL:', baseUrl);
@@ -522,23 +527,23 @@
                 
                 radarData = data.radar.past.concat(data.radar.nowcast);
                 
+                // Pre-create all radar layers
                 radarData.forEach(function(frame, index) {
                     const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${currentColorScheme}/1_1.png`, {
                         tileSize: 256,
-                        opacity: 0, // Start with 0 opacity for smooth transitions
+                        opacity: 0,
                         transparent: true
                     });
                     
                     radarLayers.push(radarLayer);
-                    
-                    if (index === 0) {
-                        radarLayer.addTo(map);
-                        // Fade in the first layer
-                        setTimeout(() => {
-                            radarLayer.setOpacity(0.6);
-                        }, 100);
-                    }
                 });
+
+                // Initialize with first frame
+                if (radarLayers.length > 0) {
+                    activeLayer = radarLayers[0];
+                    activeLayer.addTo(map);
+                    activeLayer.setOpacity(0.6);
+                }
 
                 updateTimeDisplay();
                 startAnimation();
@@ -553,55 +558,63 @@
             if (animationTimer) clearInterval(animationTimer);
             
             animationTimer = setInterval(function() {
-                if (animating && radarLayers.length > 0) {
-                    const currentLayer = radarLayers[animationPosition];
-                    const nextPosition = (animationPosition + 1) % radarLayers.length;
-                    const nextLayer = radarLayers[nextPosition];
-                    
-                    if (currentLayer && nextLayer) {
-                        // Add the next layer with 0 opacity
-                        nextLayer.setOpacity(0);
-                        if (!map.hasLayer(nextLayer)) {
-                            nextLayer.addTo(map);
-                        }
-                        
-                        // Smooth transition: fade out current, fade in next
-                        let fadeStep = 0;
-                        const fadeSteps = 10;
-                        const fadeInterval = setInterval(() => {
-                            fadeStep++;
-                            const progress = fadeStep / fadeSteps;
-                            
-                            // Fade out current layer
-                            if (currentLayer && map.hasLayer(currentLayer)) {
-                                currentLayer.setOpacity(0.6 * (1 - progress));
-                            }
-                            
-                            // Fade in next layer
-                            if (nextLayer && map.hasLayer(nextLayer)) {
-                                nextLayer.setOpacity(0.6 * progress);
-                            }
-                            
-                            if (fadeStep >= fadeSteps) {
-                                clearInterval(fadeInterval);
-                                
-                                // Clean up: remove the old layer completely
-                                if (currentLayer && map.hasLayer(currentLayer)) {
-                                    map.removeLayer(currentLayer);
-                                }
-                                
-                                // Ensure next layer is at full opacity
-                                if (nextLayer && map.hasLayer(nextLayer)) {
-                                    nextLayer.setOpacity(0.6);
-                                }
-                            }
-                        }, 15); // 15ms between fade steps for smooth transition
+                if (animating && radarLayers.length > 0 && !isTransitioning) {
+                    transitionToNextFrame();
+                }
+            }, 1000); // Slower timing for better viewing
+        }
+
+        function transitionToNextFrame() {
+            if (isTransitioning || radarLayers.length === 0) return;
+            
+            isTransitioning = true;
+            
+            const nextPosition = (animationPosition + 1) % radarLayers.length;
+            nextLayer = radarLayers[nextPosition];
+            
+            // Add next layer at 0 opacity
+            if (!map.hasLayer(nextLayer)) {
+                nextLayer.addTo(map);
+            }
+            nextLayer.setOpacity(0);
+            
+            // Smooth crossfade using requestAnimationFrame for 60fps
+            const startTime = performance.now();
+            const transitionDuration = 300; // 300ms transition
+            
+            function animateTransition(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / transitionDuration, 1);
+                
+                // Use easing function for smoother transition
+                const easedProgress = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+                
+                if (activeLayer && map.hasLayer(activeLayer)) {
+                    activeLayer.setOpacity(0.6 * (1 - easedProgress));
+                }
+                
+                if (nextLayer && map.hasLayer(nextLayer)) {
+                    nextLayer.setOpacity(0.6 * easedProgress);
+                }
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateTransition);
+                } else {
+                    // Transition complete
+                    if (activeLayer && map.hasLayer(activeLayer)) {
+                        map.removeLayer(activeLayer);
                     }
                     
+                    activeLayer = nextLayer;
+                    nextLayer = null;
                     animationPosition = nextPosition;
+                    isTransitioning = false;
+                    
                     updateTimeDisplay();
                 }
-            }, 800); // Slightly longer interval to accommodate fade transition
+            }
+            
+            requestAnimationFrame(animateTransition);
         }
 
         function toggleAnimation() {
@@ -609,7 +622,13 @@
             const btn = document.getElementById('play-pause-btn');
             btn.textContent = animating ? '⏸️' : '▶️';
             btn.classList.toggle('active', animating);
+            
+            if (animating && !animationTimer) {
+                startAnimation();
+            }
         }
+
+
 
         function updateTimeDisplay() {
             if (radarData[animationPosition]) {
@@ -635,11 +654,13 @@
             
             currentColorScheme = colorScheme;
             
-            // Store current animation state
+            // Store current state
             const wasAnimating = animating;
             const currentPos = animationPosition;
             
-            // Stop animation temporarily
+            // Stop animation and clear transitions
+            animating = false;
+            isTransitioning = false;
             if (animationTimer) clearInterval(animationTimer);
             
             // Remove all current layers
@@ -648,26 +669,29 @@
                     map.removeLayer(layer);
                 }
             });
+            
+            // Clear layer references
+            activeLayer = null;
+            nextLayer = null;
             radarLayers = [];
             
             // Recreate layers with new color scheme
             radarData.forEach(function(frame, index) {
                 const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`, {
                     tileSize: 256,
-                    opacity: 0, // Start with 0 opacity for smooth transitions
+                    opacity: 0,
                     transparent: true
                 });
                 
                 radarLayers.push(radarLayer);
-                
-                if (index === currentPos) {
-                    radarLayer.addTo(map);
-                    // Fade in the current layer
-                    setTimeout(() => {
-                        radarLayer.setOpacity(0.6);
-                    }, 100);
-                }
             });
+            
+            // Restore current frame
+            if (radarLayers[currentPos]) {
+                activeLayer = radarLayers[currentPos];
+                activeLayer.addTo(map);
+                activeLayer.setOpacity(0.6);
+            }
             
             // Restore animation state
             animating = wasAnimating;
