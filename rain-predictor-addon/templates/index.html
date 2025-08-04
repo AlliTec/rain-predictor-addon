@@ -166,7 +166,7 @@
     </style>
 </head>
 <!-- Pass data from backend to frontend using data-* attributes -->
-<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}" data-api-url="{{ api_url | safe }}">
+<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}" data-api-url="{{ api_url | safe }}" data-base-api-url="{{ base_api_url | safe }}">
 
     <!-- Custom map using RainViewer API -->
     <div id="map"></div>
@@ -218,6 +218,7 @@
         const latitude = parseFloat(document.body.dataset.latitude);
         const longitude = parseFloat(document.body.dataset.longitude);
         const apiUrl = document.body.dataset.apiUrl;
+        const baseApiUrl = document.body.dataset.baseApiUrl;
 
         let map;
         let radarLayers = [];
@@ -287,7 +288,8 @@
             saveBtn.disabled = true;
 
             // Construct the correct URL for the set_location endpoint
-            const setLocationUrl = apiUrl.replace('/api/data', '/api/set_location');
+            const setLocationUrl = `${baseApiUrl}/set_location`;
+            const configUrl = `${baseApiUrl}/update_config`;
 
             try {
                 const response = await fetch(setLocationUrl, {

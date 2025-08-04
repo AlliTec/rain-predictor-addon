@@ -66,9 +66,10 @@ def get_all_data():
 def index():
     ingress_entry = os.environ.get('INGRESS_ENTRY', '')
     api_url = f"{ingress_entry}/api/data"
+    base_api_url = f"{ingress_entry}/api"
     lat = get_ha_state('input_number.rain_prediction_latitude', -24.98)
     lon = get_ha_state('input_number.rain_prediction_longitude', 151.86)
-    return render_template('index.html', latitude=lat, longitude=lon, api_url=api_url)
+    return render_template('index.html', latitude=lat, longitude=lon, api_url=api_url, base_api_url=base_api_url)
 
 @app.route('/api/data')
 def api_data():
