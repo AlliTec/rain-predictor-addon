@@ -56,16 +56,83 @@
             color: #aaa; 
         }
 
+        /* Enhanced collapsible animation controls */
         .animation-controls {
             position: absolute;
             top: 10px;
             left: 10px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
+            background: rgba(255, 255, 255, 0.3);
             border-radius: 8px;
             z-index: 1000;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            min-width: 200px;
+            min-width: 50px;
+            max-width: 250px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .animation-controls.collapsed {
+            background: rgba(255, 255, 255, 0.3);
+            padding: 10px;
+            width: 50px;
+            height: 40px;
+        }
+
+        .animation-controls.expanded {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            width: 220px;
+            height: auto;
+            cursor: default;
+        }
+
+        .animation-controls:hover {
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        .animation-controls.expanded:hover {
+            background: rgba(255, 255, 255, 0.98);
+        }
+
+        /* Control header for collapsed state */
+        .controls-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .controls-icon {
+            font-size: 18px;
+            color: #333;
+            transition: transform 0.3s ease;
+        }
+
+        .animation-controls.expanded .controls-icon {
+            display: none;
+        }
+
+        .animation-controls.collapsed .controls-icon {
+            display: block;
+        }
+
+        /* Expandable content */
+        .controls-content {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .animation-controls.expanded .controls-content {
+            display: block;
+            opacity: 1;
+        }
+
+        .animation-controls.collapsed .controls-content {
+            display: none;
         }
 
         .control-section {
@@ -122,6 +189,34 @@
             text-align: center;
         }
 
+        /* Close button for expanded state */
+        .close-btn {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            background: none;
+            border: none;
+            font-size: 16px;
+            color: #666;
+            cursor: pointer;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .close-btn:hover {
+            background: rgba(0,0,0,0.1);
+            color: #333;
+        }
+
+        .animation-controls.collapsed .close-btn {
+            display: none;
+        }
+
         .location-marker {
             background: #ff4444;
             border: 3px solid white;
@@ -174,35 +269,47 @@
         <div class="data-item"><div class="data-value" id="bearing">--</div><div class="data-label">BEARING</div></div>
     </div>
 
-    <div class="animation-controls">
-        <div class="control-section">
-            <span class="control-label">Animation</span>
-            <button class="control-btn" id="play-pause-btn">⏸️</button>
-            <div class="time-display" id="time-display">Loading...</div>
+    <!-- Enhanced collapsible animation controls -->
+    <div class="animation-controls collapsed" id="animation-controls">
+        <!-- Header for collapsed state -->
+        <div class="controls-header">
+            <div class="controls-icon">⚙️</div>
         </div>
         
-        <div class="control-section">
-            <label class="control-label" for="color-scheme">Radar Colors</label>
-            <select class="color-select" id="color-scheme">
-                <option value="2">Original (Blue-Green-Yellow-Red)</option>
-                <option value="0">Universal Blue</option>
-                <option value="1">TITAN</option>
-                <option value="3">The Weather Channel</option>
-                <option value="4">Meteored</option>
-                <option value="5">NEXRAD Level-III</option>
-                <option value="6">RAINBOW @ SELEX-SI</option>
-                <option value="7">Dark Sky</option>
-            </select>
-        </div>
+        <!-- Close button for expanded state -->
+        <button class="close-btn" id="close-controls">×</button>
         
-        <div class="control-section">
-            <label class="control-label" for="map-style">Map Style</label>
-            <select class="color-select" id="map-style">
-                <option value="light">Light</option>
-                <option value="standard">Standard</option>
-                <option value="satellite">Satellite</option>
-                <option value="terrain">Terrain</option>
-            </select>
+        <!-- Expandable content -->
+        <div class="controls-content">
+            <div class="control-section">
+                <span class="control-label">Animation</span>
+                <button class="control-btn" id="play-pause-btn">⏸️</button>
+                <div class="time-display" id="time-display">Loading...</div>
+            </div>
+            
+            <div class="control-section">
+                <label class="control-label" for="color-scheme">Radar Colors</label>
+                <select class="color-select" id="color-scheme">
+                    <option value="2">Original (Blue-Green-Yellow-Red)</option>
+                    <option value="0">Universal Blue</option>
+                    <option value="1">TITAN</option>
+                    <option value="3">The Weather Channel</option>
+                    <option value="4">Meteored</option>
+                    <option value="5">NEXRAD Level-III</option>
+                    <option value="6">RAINBOW @ SELEX-SI</option>
+                    <option value="7">Dark Sky</option>
+                </select>
+            </div>
+            
+            <div class="control-section">
+                <label class="control-label" for="map-style">Map Style</label>
+                <select class="color-select" id="map-style">
+                    <option value="light">Light</option>
+                    <option value="standard">Standard</option>
+                    <option value="satellite">Satellite</option>
+                    <option value="terrain">Terrain</option>
+                </select>
+            </div>
         </div>
     </div>
 
@@ -236,6 +343,26 @@
             setLocation: apiSetLocationUrl, 
             updateConfig: apiUpdateConfigUrl 
         });
+
+        // Control panel functionality
+        function toggleControls() {
+            const controls = document.getElementById('animation-controls');
+            const isCollapsed = controls.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                controls.classList.remove('collapsed');
+                controls.classList.add('expanded');
+            } else {
+                controls.classList.remove('expanded');
+                controls.classList.add('collapsed');
+            }
+        }
+
+        function collapseControls() {
+            const controls = document.getElementById('animation-controls');
+            controls.classList.remove('expanded');
+            controls.classList.add('collapsed');
+        }
 
         function initializeMap() {
             map = L.map('map', {
@@ -533,11 +660,45 @@
             setInterval(fetchAndUpdateData, 5000);
             
             setTimeout(function() {
+                // Control panel toggle functionality
+                const controlsPanel = document.getElementById('animation-controls');
+                const controlsHeader = controlsPanel.querySelector('.controls-header');
+                const closeBtn = document.getElementById('close-controls');
+                
+                // Click on collapsed panel to expand
+                controlsHeader.addEventListener('click', function(e) {
+                    if (controlsPanel.classList.contains('collapsed')) {
+                        e.stopPropagation();
+                        toggleControls();
+                    }
+                });
+                
+                // Click close button to collapse
+                closeBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    collapseControls();
+                });
+                
+                // Prevent collapse when clicking inside expanded content
+                const controlsContent = controlsPanel.querySelector('.controls-content');
+                controlsContent.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                });
+                
+                // Click outside to collapse (optional)
+                document.addEventListener('click', function(e) {
+                    if (!controlsPanel.contains(e.target) && controlsPanel.classList.contains('expanded')) {
+                        collapseControls();
+                    }
+                });
+
+                // Play/pause button
                 const playPauseBtn = document.getElementById('play-pause-btn');
                 if (playPauseBtn) {
                     playPauseBtn.addEventListener('click', toggleAnimation);
                 }
                 
+                // Color scheme dropdown
                 const colorSchemeSelect = document.getElementById('color-scheme');
                 if (colorSchemeSelect) {
                     colorSchemeSelect.addEventListener('change', function() {
@@ -545,6 +706,7 @@
                     });
                 }
                 
+                // Map style dropdown
                 const mapStyleSelect = document.getElementById('map-style');
                 if (mapStyleSelect) {
                     mapStyleSelect.addEventListener('change', function() {
@@ -552,6 +714,7 @@
                     });
                 }
 
+                // Save location button
                 const saveLocationBtn = document.getElementById('save-location-btn');
                 if (saveLocationBtn) {
                     saveLocationBtn.addEventListener('click', saveLocation);
