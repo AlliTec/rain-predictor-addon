@@ -18,89 +18,6 @@
             display: flex; 
             flex-direction: column; 
         }
-
-        // Change radar color scheme
-        function changeColorScheme(colorScheme) {
-            console.log('changeColorScheme called with:', colorScheme);
-            currentColorScheme = colorScheme;
-            
-            if (radarLayers.length === 0) {
-                console.log('No radar layers to update yet');
-                return;
-            }
-            
-            // Remove all current radar layers
-            radarLayers.forEach(function(layer) {
-                if (map.hasLayer(layer)) {
-                    map.removeLayer(layer);
-                }
-            });
-            radarLayers = [];
-            
-            // Recreate layers with new color scheme
-            radarData.forEach(function(frame, index) {
-                const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`, {
-                    tileSize: 256,
-                    opacity: 0.6,
-                    transparent: true
-                });
-                
-                radarLayers.push(radarLayer);
-                
-                if (index === animationPosition) {
-                    radarLayer.addTo(map);
-                }
-            });
-            
-            console.log('Color scheme updated, layers recreated');
-        }
-
-        // Change map base layer
-        function changeMapStyle(style) {
-            console.log('changeMapStyle called with:', style);
-            
-            if (baseLayer && map.hasLayer(baseLayer)) {
-                map.removeLayer(baseLayer);
-            }
-            
-            switch(style) {
-                case 'light':
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'standard':
-                    baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors',
-                        maxZoom: 19
-                    });
-                    break;
-                case 'satellite':
-                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                        attribution: '© Esri, Maxar, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
-                        maxZoom: 18
-                    });
-                    break;
-                case 'terrain':
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-                    break;
-                default:
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-            }
-            
-            baseLayer.addTo(map);
-            console.log('Map style updated to:', style);
-        }
         
         #map {
             width: 100%;
@@ -237,13 +154,13 @@
     <div class="animation-controls">
         <div class="control-section">
             <span class="control-label">Animation</span>
-            <button class="control-btn" id="play-pause-btn" onclick="toggleAnimation()">⏸️</button>
+            <button class="control-btn" id="play-pause-btn">⏸️</button>
             <div class="time-display" id="time-display">Loading...</div>
         </div>
         
         <div class="control-section">
             <label class="control-label" for="color-scheme">Radar Colors</label>
-            <select class="color-select" id="color-scheme" onchange="changeColorScheme(parseInt(this.value))">
+            <select class="color-select" id="color-scheme">
                 <option value="2">Original (Blue-Green-Yellow-Red)</option>
                 <option value="0">Universal Blue</option>
                 <option value="1">TITAN</option>
@@ -257,7 +174,7 @@
         
         <div class="control-section">
             <label class="control-label" for="map-style">Map Style</label>
-            <select class="color-select" id="map-style" onchange="changeMapStyle(this.value)">
+            <select class="color-select" id="map-style">
                 <option value="light">Light</option>
                 <option value="standard">Standard</option>
                 <option value="satellite">Satellite</option>
@@ -350,7 +267,7 @@
         function startAnimation() {
             if (animationTimer) clearInterval(animationTimer);
             
-            animationTimer = setInterval(() => {
+            animationTimer = setInterval(function() {
                 if (animating && radarLayers.length > 0) {
                     // Hide current layer
                     if (radarLayers[animationPosition]) {
@@ -396,10 +313,83 @@
             }
         }
 
-        // Make functions globally accessible
-        window.changeColorScheme = changeColorScheme;
-        window.changeMapStyle = changeMapStyle;
-        window.toggleAnimation = toggleAnimation;
+        // Change radar color scheme
+        function changeColorScheme(colorScheme) {
+            if (!map || radarLayers.length === 0) return;
+            
+            currentColorScheme = colorScheme;
+            
+            // Remove all current radar layers
+            radarLayers.forEach(function(layer) {
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+            radarLayers = [];
+            
+            // Recreate layers with new color scheme
+            radarData.forEach(function(frame, index) {
+                const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`, {
+                    tileSize: 256,
+                    opacity: 0.6,
+                    transparent: true
+                });
+                
+                radarLayers.push(radarLayer);
+                
+                if (index === animationPosition) {
+                    radarLayer.addTo(map);
+                }
+            });
+        }
+
+        // Change map base layer
+        function changeMapStyle(style) {
+            if (!map || !baseLayer) return;
+            
+            if (map.hasLayer(baseLayer)) {
+                map.removeLayer(baseLayer);
+            }
+            
+            switch(style) {
+                case 'light':
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '© OpenStreetMap contributors, © CARTO',
+                        subdomains: 'abcd',
+                        maxZoom: 20
+                    });
+                    break;
+                case 'standard':
+                    baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors',
+                        maxZoom: 19
+                    });
+                    break;
+                case 'satellite':
+                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                        attribution: '© Esri, Maxar, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
+                        maxZoom: 18
+                    });
+                    break;
+                case 'terrain':
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '© OpenStreetMap contributors, © CARTO',
+                        subdomains: 'abcd',
+                        maxZoom: 20
+                    });
+                    break;
+                default:
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '© OpenStreetMap contributors, © CARTO',
+                        subdomains: 'abcd',
+                        maxZoom: 20
+                    });
+            }
+            
+            baseLayer.addTo(map);
+        }
+
+        // Data panel functions
         function updateDataDisplay(data) {
             let timeText = data.time_to_rain;
             if (timeText === '999') timeText = "No Rain";
@@ -427,76 +417,47 @@
             }
         }
 
-        // Event listeners
-        document.getElementById('play-pause-btn').addEventListener('click', toggleAnimation);
-        
-        document.getElementById('color-scheme').addEventListener('change', function(e) {
-            console.log('Color scheme changed to:', e.target.value);
-            changeColorScheme(parseInt(e.target.value));
-        });
-        
-        document.getElementById('map-style').addEventListener('change', function(e) {
-            console.log('Map style changed to:', e.target.value);
-            changeMapStyle(e.target.value);
-        });
-
         // Initialize everything when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, initializing...');
             initializeMap();
             fetchAndUpdateData();
             setInterval(fetchAndUpdateData, 5000);
             
+            // Set up event listeners after map is initialized
+            setTimeout(function() {
+                // Play/pause button
+                const playPauseBtn = document.getElementById('play-pause-btn');
+                if (playPauseBtn) {
+                    playPauseBtn.addEventListener('click', toggleAnimation);
+                }
+                
+                // Color scheme dropdown
+                const colorSchemeSelect = document.getElementById('color-scheme');
+                if (colorSchemeSelect) {
+                    colorSchemeSelect.addEventListener('change', function() {
+                        changeColorScheme(parseInt(this.value));
+                    });
+                }
+                
+                // Map style dropdown
+                const mapStyleSelect = document.getElementById('map-style');
+                if (mapStyleSelect) {
+                    mapStyleSelect.addEventListener('change', function() {
+                        changeMapStyle(this.value);
+                    });
+                }
+            }, 3000); // Wait 3 seconds for map to fully initialize
+            
             // Refresh radar data every 10 minutes
             setInterval(function() {
                 radarLayers.forEach(function(layer) {
-                    map.removeLayer(layer);
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
                 });
                 radarLayers = [];
                 loadRadarData();
             }, 600000);
-        });
-
-        // Set up event listeners after a short delay to ensure elements are ready
-        window.addEventListener('load', function() {
-            console.log('Window loaded, setting up controls...');
-            
-            setTimeout(function() {
-                const colorSchemeSelect = document.getElementById('color-scheme');
-                const mapStyleSelect = document.getElementById('map-style');
-                const playPauseBtn = document.getElementById('play-pause-btn');
-                
-                console.log('Control elements found:', {
-                    colorScheme: !!colorSchemeSelect,
-                    mapStyle: !!mapStyleSelect,
-                    playPause: !!playPauseBtn
-                });
-                
-                if (colorSchemeSelect) {
-                    colorSchemeSelect.onchange = function() {
-                        const value = parseInt(this.value);
-                        console.log('Color scheme changing to:', value);
-                        changeColorScheme(value);
-                    };
-                }
-                
-                if (mapStyleSelect) {
-                    mapStyleSelect.onchange = function() {
-                        const value = this.value;
-                        console.log('Map style changing to:', value);
-                        changeMapStyle(value);
-                    };
-                }
-                
-                if (playPauseBtn) {
-                    playPauseBtn.onclick = function() {
-                        console.log('Play/pause clicked');
-                        toggleAnimation();
-                    };
-                }
-                
-                console.log('Event listeners attached successfully');
-            }, 2000);
         });
     </script>
 </body>
