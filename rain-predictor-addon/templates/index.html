@@ -360,12 +360,26 @@
             }));
         }
 
+        function saveZoomLevel(zoom) {
+            currentSettings.zoomLevel = zoom;
+            saveSettings(); // Save to persistent storage
+        }
+
+        function getSavedZoomLevel() {
+            return currentSettings.zoomLevel || 10; // Use settings zoom or default to 10
+        }
+
         // UPDATED: Function to get saved settings or use defaults - NOW INCLUDES ZOOM
         function getSavedSettings() {
             const saved = localStorage.getItem('rainPredictor_settings');
             if (saved) {
                 try {
-                    return JSON.parse(saved);
+                    const parsed = JSON.parse(saved);
+                    // Ensure zoomLevel exists with a default value
+                    if (!parsed.hasOwnProperty('zoomLevel')) {
+                        parsed.zoomLevel = 10;
+                    }
+                    return parsed;
                 } catch (e) {
                     console.error('Error parsing saved settings:', e);
                 }
@@ -380,13 +394,15 @@
         }
 
         // UPDATED: Function to save settings permanently - NOW INCLUDES ZOOM
-        function saveSettings(newSettings = {}) {
-            // Merge with current settings
-            const updatedSettings = { ...currentSettings, ...newSettings };
-            localStorage.setItem('rainPredictor_settings', JSON.stringify(updatedSettings));
-            
-            // Update the global currentSettings object
-            Object.assign(currentSettings, updatedSettings);
+        function saveSettings(colorScheme, mapStyle, zoomLevel) {
+            const settings = {
+                colorScheme: colorScheme || currentSettings.colorScheme,
+                mapStyle: mapStyle || currentSettings.mapStyle,
+                zoomLevel: zoomLevel || currentSettings.zoomLevel
+            };
+            localStorage.setItem('rainPredictor_settings', JSON.stringify(settings));
+            // Update currentSettings
+            Object.assign(currentSettings, settings);
         }
 
         // Get current location and settings (saved or default)
@@ -446,24 +462,20 @@
 
         // FIXED: Map initialization with proper base layer setup
         function initializeMap() {
+            const savedZoom = getSavedZoomLevel();
+            
             map = L.map('map', {
                 center: [latitude, longitude],
-                zoom: currentSettings.zoomLevel, // Use saved zoom level from settings
+                zoom: savedZoom, // Use saved zoom level
                 zoomControl: true,
                 attributionControl: false
             });
 
-            // FIXED: Create initial base layer the original way
             baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                 attribution: '© OpenStreetMap contributors, © CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             }).addTo(map);
-
-            // THEN set the correct style if it's different from light
-            if (currentSettings.mapStyle !== 'light') {
-                changeMapStyle(currentSettings.mapStyle);
-            }
 
             // Add scale control to bottom left corner
             L.control.scale({
@@ -473,9 +485,9 @@
                 maxWidth: 150
             }).addTo(map);
 
-            // Save zoom level to settings when it changes
+            // Save zoom level when it changes
             map.on('zoomend', function() {
-                saveSettings({ zoomLevel: map.getZoom() });
+                saveZoomLevel(map.getZoom());
             });
 
             const locationIcon = L.divIcon({
@@ -774,7 +786,6 @@
             saveSettings({ colorScheme: colorScheme });
         }
 
-        // UPDATED: Map style change with proper radar preservation and settings save
         function changeMapStyle(style) {
             if (!map) return;
             
@@ -782,8 +793,48 @@
             const currentRadarOpacities = radarLayers.map(layer => layer.options.opacity);
             const wasAnimating = animating;
             
-            // Change the base layer using the new function
-            setBaseLayer(style);
+            // Remove current base layer
+            if (baseLayer) {
+                map.removeLayer(baseLayer);
+            }
+            
+            // Add new base layer based on style
+            switch(style) {
+                case 'light':
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '© OpenStreetMap contributors, © CARTO',
+                        subdomains: 'abcd',
+                        maxZoom: 20
+                    });
+                    break;
+                case 'standard':
+                    baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors',
+                        maxZoom: 20
+                    });
+                    break;
+                case 'satellite':
+                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                        attribution: '© Esri, © OpenStreetMap contributors',
+                        maxZoom: 20
+                    });
+                    break;
+                case 'terrain':
+                    baseLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenTopoMap, © OpenStreetMap contributors',
+                        maxZoom: 20
+                    });
+                    break;
+                default:
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '© OpenStreetMap contributors, © CARTO',
+                        subdomains: 'abcd',
+                        maxZoom: 20
+                    });
+            }
+            
+            // Add the new base layer
+            baseLayer.addTo(map);
             
             // Ensure radar layers are still on top and maintain their opacity
             radarLayers.forEach((layer, index) => {
@@ -801,17 +852,15 @@
                 startAnimation();
             }
             
-            // Save to settings
-            saveSettings({ mapStyle: style });
+            // Save to settings (UPDATED to use your original saveSettings structure)
+            saveSettings(currentSettings.colorScheme, style, currentSettings.zoomLevel);
         }
 
-        // Cardinal direction conversion function (unchanged)
         function degreesToCardinal(degrees) {
             if (degrees === null || degrees === undefined || degrees === 'N/A') {
                 return 'N/A';
             }
             
-            // Ensure degrees is a number and normalize to 0-360 range
             const normalizedDegrees = ((parseFloat(degrees) % 360) + 360) % 360;
             
             const directions = [
@@ -840,7 +889,7 @@
                 }
             }
             
-            return `N (${Math.round(normalizedDegrees)}°)`; // fallback
+            return `N (${Math.round(normalizedDegrees)}°)`;
         }
 
         // UPDATED: Data display with cardinal directions (unchanged but verified)
@@ -887,14 +936,14 @@
             }
             document.getElementById('speed').innerText = speedText;
 
-            // Handle direction - WITH CARDINAL DIRECTIONS
+            // Handle direction - NOW WITH CARDINAL DIRECTIONS
             let directionText = '--';
             if (data && isValidValue(data.direction)) {
                 directionText = degreesToCardinal(data.direction);
             }
             document.getElementById('direction').innerText = directionText;
 
-            // Handle bearing - WITH CARDINAL DIRECTIONS
+            // Handle bearing - NOW WITH CARDINAL DIRECTIONS  
             let bearingText = '--';
             if (data && isValidValue(data.bearing)) {
                 bearingText = degreesToCardinal(data.bearing);
