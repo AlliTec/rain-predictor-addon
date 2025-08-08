@@ -433,8 +433,19 @@
                 attributionControl: false
             });
 
-            // Apply saved map style
-            changeMapStyle(currentSettings.mapStyle);
+            baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap contributors, © CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            // Add scale control to bottom left corner
+            L.control.scale({
+                position: 'bottomleft',
+                metric: true,
+                imperial: false,
+                maxWidth: 150
+            }).addTo(map);
 
             const locationIcon = L.divIcon({
                 className: 'location-marker',
