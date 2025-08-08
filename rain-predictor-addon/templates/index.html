@@ -56,11 +56,11 @@
             color: #aaa; 
         }
 
-        /* Enhanced collapsible animation controls - moved to left side */
+        /* Enhanced collapsible animation controls - MOVED TO RIGHT SIDE */
         .animation-controls {
             position: absolute;
             top: 10px;
-            left: 60px; /* Positioned just to the right of zoom controls */
+            right: 80px;
             background: rgba(255, 255, 255, 0.3);
             border-radius: 8px;
             z-index: 1000;
@@ -74,8 +74,8 @@
 
         .animation-controls.collapsed {
             background: rgba(255, 255, 255, 0.3);
-            padding: 10px;
-            width: 50px;
+            padding: 8px;
+            width: 120px; /* Wider to accommodate time display */
             height: 40px;
         }
 
@@ -99,14 +99,14 @@
         .controls-header {
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
             width: 100%;
             height: 100%;
             position: relative;
         }
 
         .controls-icon {
-            font-size: 18px;
+            font-size: 16px;
             color: #333;
             transition: transform 0.3s ease;
         }
@@ -116,6 +116,25 @@
         }
 
         .animation-controls.collapsed .controls-icon {
+            display: block;
+        }
+
+        /* Mini time display for collapsed state */
+        .time-display-mini {
+            color: #333;
+            font-size: 10px;
+            font-weight: bold;
+            background: rgba(247, 250, 252, 0.8);
+            padding: 2px 6px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        .animation-controls.expanded .time-display-mini {
+            display: none;
+        }
+
+        .animation-controls.collapsed .time-display-mini {
             display: block;
         }
 
@@ -129,6 +148,17 @@
         .animation-controls.expanded .controls-content {
             display: block;
             opacity: 1;
+        }
+
+        /* Regular time display for expanded state */
+        .time-display {
+            color: #333;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 5px;
+            background: #f7fafc;
+            border-radius: 4px;
+            text-align: center;
         }
 
         .animation-controls.collapsed .controls-content {
@@ -269,11 +299,12 @@
         <div class="data-item"><div class="data-value" id="bearing">--</div><div class="data-label">BEARING</div></div>
     </div>
 
-    <!-- Enhanced collapsible animation controls - moved to left side -->
+    <!-- Enhanced collapsible animation controls with always-visible time -->
     <div class="animation-controls collapsed" id="animation-controls">
-        <!-- Header for collapsed state -->
+        <!-- Header for collapsed state with time display -->
         <div class="controls-header">
             <div class="controls-icon">⚙️</div>
+            <div class="time-display-mini" id="time-display-mini">Loading...</div>
         </div>
         
         <!-- Close button for expanded state -->
@@ -571,8 +602,8 @@
                         tileSize: 256,
                         opacity: 0.6,
                         transparent: true,
-                        fadeAnimation: false,  // Disable fade transition
-                        zoomAnimation: false   // Disable zoom animation for smoother experience
+                        fadeAnimation: false,
+                        zoomAnimation: false
                     });
                     
                     radarLayers.push(radarLayer);
@@ -582,7 +613,6 @@
                     }
                 });
 
-                // Reset animation position to ensure we start from the beginning
                 animationPosition = 0;
                 updateTimeDisplay();
                 startAnimation();
@@ -598,22 +628,24 @@
             
             animationTimer = setInterval(function() {
                 if (animating && radarLayers.length > 0) {
-                    // Hide current layer
+                    // Calculate next frame position
+                    const nextPosition = (animationPosition + 1) % radarLayers.length;
+                    
+                    // Add the NEXT layer BEFORE removing current one (prevents strobing!)
+                    if (radarLayers[nextPosition]) {
+                        radarLayers[nextPosition].addTo(map);
+                    }
+                    
+                    // Now remove the current layer (no blank screen!)
                     if (radarLayers[animationPosition]) {
                         map.removeLayer(radarLayers[animationPosition]);
                     }
                     
-                    // Move to next frame
-                    animationPosition = (animationPosition + 1) % radarLayers.length;
-                    
-                    // Show next layer immediately (no fade)
-                    if (radarLayers[animationPosition]) {
-                        radarLayers[animationPosition].addTo(map);
-                    }
-                    
+                    // Update position
+                    animationPosition = nextPosition;
                     updateTimeDisplay();
                 }
-            }, 400); // Slightly faster animation (400ms instead of 500ms)
+            }, 450); // Moderate speed - not too fast, not too slow
         }
 
         function transitionToNextFrame() {
@@ -751,14 +783,14 @@
             });
             radarLayers = [];
             
-            // Recreate layers with new color scheme and no fade animation
+            // Recreate layers with new color scheme
             radarData.forEach(function(frame, index) {
                 const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`, {
                     tileSize: 256,
                     opacity: 0.6,
                     transparent: true,
-                    fadeAnimation: false,  // Disable fade transition
-                    zoomAnimation: false   // Disable zoom animation
+                    fadeAnimation: false,
+                    zoomAnimation: false
                 });
                 
                 radarLayers.push(radarLayer);
