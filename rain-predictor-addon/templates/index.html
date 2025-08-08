@@ -273,6 +273,18 @@
             cursor: not-allowed;
             transform: none;
         }
+
+        /* Highlight NOW state */
+        .data-value.now {
+            color: #ff6b6b !important;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
 <body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}">
@@ -927,8 +939,8 @@
             return `N (${Math.round(normalizedDegrees)}°)`;
         }
 
+        // FIXED: Updated data display function with better validation and NOW handling
         function updateDataDisplay(data) {
-            // DEBUG: Log the entire API response
             console.log('API Response:', data);
             
             // Helper function to check if a value is valid/trackable
@@ -937,58 +949,111 @@
                     return false;
                 }
                 
+                // Handle string values that might represent numbers
+                if (typeof value === 'string') {
+                    const trimmed = value.trim().toLowerCase();
+                    if (trimmed === '' || trimmed === 'n/a' || trimmed === 'null' || trimmed === '--') {
+                        return false;
+                    }
+                }
+                
                 const numValue = parseFloat(value);
                 if (isNaN(numValue)) {
                     return false;
                 }
                 
-                // These values indicate no tracking/no data
-                if (numValue === 0 || numValue === -1 || numValue === -1.0 || numValue === 999 || numValue === 999.0) {
+                // These values typically indicate no tracking/no data
+                if (numValue === -1 || numValue === -1.0 || numValue === 999 || numValue === 999.0) {
                     return false;
                 }
                 
-                // For angles (direction/bearing), accept 0-360, but we already filtered out 0 above as "no data"
-                // For other metrics, only positive values are valid
-                return numValue > 0;
+                return true;
             }
 
-            // Handle time to rain
+            // FIXED: Handle time to rain with special "NOW" case
             let timeText = '--';
-            console.log('time_to_rain value:', data?.time_to_rain, 'isValid:', data ? isValidValue(data.time_to_rain) : false);
-            if (data && isValidValue(data.time_to_rain)) {
-                timeText = `${data.time_to_rain} min`;
+            const timeElement = document.getElementById('time-to-rain');
+            
+            if (data && data.time_to_rain !== undefined && data.time_to_rain !== null) {
+                console.log('time_to_rain raw value:', data.time_to_rain, 'type:', typeof data.time_to_rain);
+                
+                // Handle special cases for "now" or immediate rain
+                if (typeof data.time_to_rain === 'string') {
+                    const lowerValue = data.time_to_rain.toLowerCase().trim();
+                    if (lowerValue === 'now' || lowerValue === '0' || lowerValue === 'immediate') {
+                        timeText = 'NOW';
+                        timeElement.classList.add('now');
+                    } else if (isValidValue(data.time_to_rain)) {
+                        const timeValue = parseFloat(data.time_to_rain);
+                        if (timeValue <= 0) {
+                            timeText = 'NOW';
+                            timeElement.classList.add('now');
+                        } else {
+                            timeText = `${Math.round(timeValue)} min`;
+                            timeElement.classList.remove('now');
+                        }
+                    }
+                } else if (typeof data.time_to_rain === 'number') {
+                    if (data.time_to_rain <= 0) {
+                        timeText = 'NOW';
+                        timeElement.classList.add('now');
+                    } else if (data.time_to_rain > 0 && data.time_to_rain < 999) {
+                        timeText = `${Math.round(data.time_to_rain)} min`;
+                        timeElement.classList.remove('now');
+                    }
+                }
             }
-            document.getElementById('time-to-rain').innerText = timeText;
+            
+            if (timeText === '--') {
+                timeElement.classList.remove('now');
+            }
+            
+            timeElement.innerText = timeText;
 
             // Handle distance
             let distanceText = '--';
-            console.log('distance value:', data?.distance, 'isValid:', data ? isValidValue(data.distance) : false);
+            console.log('distance value:', data?.distance, 'type:', typeof data?.distance, 'isValid:', data ? isValidValue(data.distance) : false);
             if (data && isValidValue(data.distance)) {
-                distanceText = `${data.distance} km`;
+                const distValue = parseFloat(data.distance);
+                if (distValue > 0) {
+                    distanceText = `${Math.round(distValue * 10) / 10} km`;
+                }
             }
             document.getElementById('distance').innerText = distanceText;
 
-            // Handle speed - WITH DEBUG
+            // FIXED: Handle speed with better validation
             let speedText = '--';
-            console.log('speed value:', data?.speed, 'isValid:', data ? isValidValue(data.speed) : false);
+            console.log('speed value:', data?.speed, 'type:', typeof data?.speed, 'isValid:', data ? isValidValue(data.speed) : false);
             if (data && isValidValue(data.speed)) {
-                speedText = `${data.speed} kph`;
+                const speedValue = parseFloat(data.speed);
+                // Accept any positive speed value, including very small ones
+                if (speedValue > 0) {
+                    speedText = `${Math.round(speedValue * 10) / 10} kph`;
+                }
             }
             document.getElementById('speed').innerText = speedText;
 
-            // Handle direction - WITH DEBUG
+            // FIXED: Handle direction with better validation for angles
             let directionText = '--';
-            console.log('direction value:', data?.direction, 'isValid:', data ? isValidValue(data.direction) : false);
-            if (data && isValidValue(data.direction)) {
-                directionText = degreesToCardinal(data.direction);
+            console.log('direction value:', data?.direction, 'type:', typeof data?.direction, 'isValid:', data ? isValidValue(data.direction) : false);
+            if (data && data.direction !== undefined && data.direction !== null) {
+                const dirValue = parseFloat(data.direction);
+                // Valid directions are 0-360 degrees (including 0)
+                if (!isNaN(dirValue) && dirValue >= 0 && dirValue <= 360) {
+                    directionText = degreesToCardinal(dirValue);
+                }
             }
             document.getElementById('direction').innerText = directionText;
 
-            // Handle bearing - WITH DEBUG
+            // FIXED: Handle bearing with better validation for angles
             let bearingText = '--';
-            console.log('bearing value:', data?.bearing, 'isValid:', data ? isValidValue(data.bearing) : false);
-            if (data && isValidValue(data.bearing)) {
-                bearingText = degreesToCardinal(data.bearing);
+            console.log('bearing value:', data?.bearing, 'type:', typeof data?.bearing, 'isValid:', data ? isValidValue(data.bearing) : false);
+            if (data && data.bearing !== undefined && data.bearing !== null) {
+                const bearValue = parseFloat(data.bearing);
+                // Valid bearings are 0-360 degrees (including 0)
+                if (!isNaN(bearValue) && bearValue >= 0 && bearValue <= 360) {
+                    bearingText = degreesToCardinal(bearValue);
+                }
             }
             document.getElementById('bearing').innerText = bearingText;
         }
