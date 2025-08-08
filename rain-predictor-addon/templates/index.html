@@ -792,7 +792,6 @@
             }
         }
 
-        // UPDATED: Color scheme change with settings save
         function changeColorScheme(colorScheme) {
             if (!map || radarLayers.length === 0) return;
             
@@ -818,8 +817,8 @@
                 radarLayers.push(radarLayer);
             });
 
-            // Save to settings
-            saveSettings({ colorScheme: colorScheme });
+            // FIXED: Save to settings using your original function signature
+            saveSettings(colorScheme, currentSettings.mapStyle, currentSettings.zoomLevel);
         }
 
         function changeMapStyle(style) {
@@ -1046,17 +1045,36 @@
                     playPauseBtn.addEventListener('click', toggleAnimation);
                 }
                 
-                // UPDATED: Color scheme dropdown with settings integration
+                // FIXED: Color scheme dropdown with better value setting
                 const colorSchemeSelect = document.getElementById('color-scheme');
                 if (colorSchemeSelect) {
-                    // Set saved value from settings
-                    colorSchemeSelect.value = currentSettings.colorScheme;
+                    // Ensure the value is a string to match option values
+                    const savedColorScheme = String(currentSettings.colorScheme);
+                    
+                    // Set saved value with a small delay to ensure dropdown is ready
+                    setTimeout(() => {
+                        colorSchemeSelect.value = savedColorScheme;
+                        
+                        // Force a visual update if needed
+                        if (colorSchemeSelect.value !== savedColorScheme) {
+                            // Fallback: find and select the option manually
+                            const options = colorSchemeSelect.options;
+                            for (let i = 0; i < options.length; i++) {
+                                if (options[i].value === savedColorScheme) {
+                                    colorSchemeSelect.selectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        console.log('Color scheme set to:', colorSchemeSelect.value, 'from saved:', savedColorScheme);
+                    }, 100);
                     
                     colorSchemeSelect.addEventListener('change', function() {
                         changeColorScheme(parseInt(this.value));
                     });
                 }
-                
+
                 // UPDATED: Map style dropdown with settings integration
                 const mapStyleSelect = document.getElementById('map-style');
                 if (mapStyleSelect) {
