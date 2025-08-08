@@ -56,11 +56,11 @@
             color: #aaa; 
         }
 
-        /* Enhanced collapsible animation controls - MOVED TO RIGHT SIDE */
+        /* Enhanced collapsible animation controls - BACK TO LEFT SIDE */
         .animation-controls {
             position: absolute;
             top: 10px;
-            right: 80px;
+            left: 10px; /* Back to left side */
             background: rgba(255, 255, 255, 0.3);
             border-radius: 8px;
             z-index: 1000;
@@ -75,7 +75,7 @@
         .animation-controls.collapsed {
             background: rgba(255, 255, 255, 0.3);
             padding: 8px;
-            width: 120px; /* Wider to accommodate time display */
+            width: 120px; /* Wide enough for time display */
             height: 40px;
         }
 
@@ -150,7 +150,54 @@
             opacity: 1;
         }
 
-        /* Regular time display for expanded state */
+        .animation-controls.collapsed .controls-content {
+            display: none;
+        }
+
+        .control-section {
+            margin-bottom: 10px;
+        }
+
+        .control-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .control-btn {
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .control-btn:hover {
+            background: #2d3748;
+        }
+
+        .control-btn.active {
+            background: #3182ce;
+        }
+
+        .color-select {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            background: white;
+        }
+
         .time-display {
             color: #333;
             font-size: 12px;
@@ -161,6 +208,33 @@
             text-align: center;
         }
 
+        /* Close button for expanded state */
+        .close-btn {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            background: none;
+            border: none;
+            font-size: 16px;
+            color: #666;
+            cursor: pointer;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .close-btn:hover {
+            background: rgba(0,0,0,0.1);
+            color: #333;
+        }
+
+        .animation-controls.collapsed .close-btn {
+            display: none;
+        }
         .animation-controls.collapsed .controls-content {
             display: none;
         }
@@ -596,21 +670,27 @@
                 
                 console.log(`Loaded ${radarData.length} radar frames`);
                 
-                // Add all radar layers (initially hidden) - with no fade animation
+                // Clear existing layers
+                radarLayers.forEach(function(layer) {
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
+                });
+                radarLayers = [];
+                
+                // Add ALL radar layers to the map initially (but make them invisible except the first)
                 radarData.forEach(function(frame, index) {
                     const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${currentColorScheme}/1_1.png`, {
                         tileSize: 256,
-                        opacity: 0.6,
+                        opacity: index === 0 ? 0.6 : 0, // Only first layer visible
                         transparent: true,
                         fadeAnimation: false,
                         zoomAnimation: false
                     });
                     
+                    // Add ALL layers to the map immediately
+                    radarLayer.addTo(map);
                     radarLayers.push(radarLayer);
-                    
-                    if (index === 0) {
-                        radarLayer.addTo(map);
-                    }
                 });
 
                 animationPosition = 0;
@@ -619,7 +699,10 @@
                 
             } catch (error) {
                 console.error('Error loading radar data:', error);
-                document.getElementById('time-display').textContent = 'Error loading radar';
+                const timeDisplay = document.getElementById('time-display');
+                const timeMini = document.getElementById('time-display-mini');
+                if (timeDisplay) timeDisplay.textContent = 'Error loading radar';
+                if (timeMini) timeMini.textContent = 'Error';
             }
         }
 
@@ -628,24 +711,22 @@
             
             animationTimer = setInterval(function() {
                 if (animating && radarLayers.length > 0) {
-                    // Calculate next frame position
-                    const nextPosition = (animationPosition + 1) % radarLayers.length;
-                    
-                    // Add the NEXT layer BEFORE removing current one (prevents strobing!)
-                    if (radarLayers[nextPosition]) {
-                        radarLayers[nextPosition].addTo(map);
-                    }
-                    
-                    // Now remove the current layer (no blank screen!)
+                    // Hide current layer by setting opacity to 0
                     if (radarLayers[animationPosition]) {
-                        map.removeLayer(radarLayers[animationPosition]);
+                        radarLayers[animationPosition].setOpacity(0);
                     }
                     
-                    // Update position
-                    animationPosition = nextPosition;
+                    // Move to next frame
+                    animationPosition = (animationPosition + 1) % radarLayers.length;
+                    
+                    // Show next layer by setting opacity to 0.6
+                    if (radarLayers[animationPosition]) {
+                        radarLayers[animationPosition].setOpacity(0.6);
+                    }
+                    
                     updateTimeDisplay();
                 }
-            }, 450); // Moderate speed - not too fast, not too slow
+            }, 450); // Good speed - not too fast, not too slow
         }
 
         function transitionToNextFrame() {
@@ -753,20 +834,24 @@
         }
 
         function updateTimeDisplay() {
-            if (radarData[animationPosition]) {
+            if (radarData && radarData[animationPosition]) {
                 const time = new Date(radarData[animationPosition].time * 1000);
                 const now = new Date();
                 const diffMinutes = Math.round((now - time) / 60000);
                 
                 let timeText;
-                // Since we're only using past data, we won't have negative times
                 if (diffMinutes === 0) {
                     timeText = 'Now';
                 } else {
-                    timeText = `-${diffMinutes}m ago`;
+                    timeText = `-${diffMinutes}m`;
                 }
                 
-                document.getElementById('time-display').textContent = timeText;
+                // Update both time displays
+                const timeDisplay = document.getElementById('time-display');
+                const timeMini = document.getElementById('time-display-mini');
+                
+                if (timeDisplay) timeDisplay.textContent = timeText;
+                if (timeMini) timeMini.textContent = timeText;
             }
         }
 
@@ -777,27 +862,22 @@
             
             // Remove all current radar layers
             radarLayers.forEach(function(layer) {
-                if (map.hasLayer(layer)) {
-                    map.removeLayer(layer);
-                }
+                map.removeLayer(layer);
             });
             radarLayers = [];
             
-            // Recreate layers with new color scheme
+            // Recreate all layers with new color scheme
             radarData.forEach(function(frame, index) {
                 const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`, {
                     tileSize: 256,
-                    opacity: 0.6,
+                    opacity: index === animationPosition ? 0.6 : 0, // Only current frame visible
                     transparent: true,
                     fadeAnimation: false,
                     zoomAnimation: false
                 });
                 
+                radarLayer.addTo(map);
                 radarLayers.push(radarLayer);
-                
-                if (index === animationPosition) {
-                    radarLayer.addTo(map);
-                }
             });
         }
 
