@@ -75,7 +75,7 @@
         .animation-controls.collapsed {
             background: rgba(255, 255, 255, 0.3);
             padding: 8px;
-            width: 60px; /* Wide enough for time display */
+            width: 60px; /* FIXED: Wide enough for time display */
             height: 40px;
         }
 
@@ -150,91 +150,6 @@
             opacity: 1;
         }
 
-        .animation-controls.collapsed .controls-content {
-            display: none;
-        }
-
-        .control-section {
-            margin-bottom: 10px;
-        }
-
-        .control-section:last-child {
-            margin-bottom: 0;
-        }
-
-        .control-label {
-            font-size: 12px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
-            display: block;
-        }
-
-        .control-btn {
-            background: #4a5568;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            margin-right: 5px;
-        }
-
-        .control-btn:hover {
-            background: #2d3748;
-        }
-
-        .control-btn.active {
-            background: #3182ce;
-        }
-
-        .color-select {
-            width: 100%;
-            padding: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 12px;
-            background: white;
-        }
-
-        .time-display {
-            color: #333;
-            font-size: 12px;
-            font-weight: bold;
-            padding: 5px;
-            background: #f7fafc;
-            border-radius: 4px;
-            text-align: center;
-        }
-
-        /* Close button for expanded state */
-        .close-btn {
-            position: absolute;
-            top: 5px;
-            right: 8px;
-            background: none;
-            border: none;
-            font-size: 16px;
-            color: #666;
-            cursor: pointer;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            transition: background-color 0.2s ease;
-        }
-
-        .close-btn:hover {
-            background: rgba(0,0,0,0.1);
-            color: #333;
-        }
-
-        .animation-controls.collapsed .close-btn {
-            display: none;
-        }
         .animation-controls.collapsed .controls-content {
             display: none;
         }
@@ -445,7 +360,7 @@
             }));
         }
 
-        // Function to get saved settings or use defaults
+        // UPDATED: Function to get saved settings or use defaults - NOW INCLUDES ZOOM
         function getSavedSettings() {
             const saved = localStorage.getItem('rainPredictor_settings');
             if (saved) {
@@ -456,24 +371,27 @@
                 }
             }
             
-            // Default settings
+            // Default settings - NOW INCLUDES ZOOM LEVEL
             return {
                 colorScheme: 2,
-                mapStyle: 'light'
+                mapStyle: 'light',
+                zoomLevel: 10
             };
         }
 
-        // Function to save settings permanently
-        function saveSettings(colorScheme, mapStyle) {
-            localStorage.setItem('rainPredictor_settings', JSON.stringify({
-                colorScheme: colorScheme || currentColorScheme,
-                mapStyle: mapStyle || 'light'
-            }));
+        // UPDATED: Function to save settings permanently - NOW INCLUDES ZOOM
+        function saveSettings(newSettings = {}) {
+            // Merge with current settings
+            const updatedSettings = { ...currentSettings, ...newSettings };
+            localStorage.setItem('rainPredictor_settings', JSON.stringify(updatedSettings));
+            
+            // Update the global currentSettings object
+            Object.assign(currentSettings, updatedSettings);
         }
 
         // Get current location and settings (saved or default)
         const currentLocation = getSavedLocation();
-        const currentSettings = getSavedSettings();
+        let currentSettings = getSavedSettings(); // CHANGED: Made mutable with let
         const latitude = currentLocation.latitude;
         const longitude = currentLocation.longitude;
 
@@ -495,15 +413,11 @@
         let currentColorScheme = currentSettings.colorScheme;
         let baseLayer;
         let locationMarker;
-        
-        // Dual layer system for smooth transitions
-        let activeLayer = null;
-        let nextLayer = null;
-        let isTransitioning = false;
 
         console.log('Current URL:', currentUrl);
         console.log('Base URL:', baseUrl);
         console.log('Using location:', { latitude, longitude });
+        console.log('Using settings:', currentSettings);
         console.log('API URLs:', { 
             data: apiDataUrl, 
             setLocation: apiSetLocationUrl, 
@@ -530,19 +444,17 @@
             controls.classList.add('collapsed');
         }
 
+        // UPDATED: Map initialization with zoom persistence from settings
         function initializeMap() {
             map = L.map('map', {
                 center: [latitude, longitude],
-                zoom: 10,
+                zoom: currentSettings.zoomLevel, // Use saved zoom level from settings
                 zoomControl: true,
                 attributionControl: false
             });
 
-            baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: '© OpenStreetMap contributors, © CARTO',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(map);
+            // Set the correct base layer based on saved settings
+            setBaseLayer(currentSettings.mapStyle);
 
             // Add scale control to bottom left corner
             L.control.scale({
@@ -551,6 +463,11 @@
                 imperial: false,
                 maxWidth: 150
             }).addTo(map);
+
+            // UPDATED: Save zoom level to settings when it changes
+            map.on('zoomend', function() {
+                saveSettings({ zoomLevel: map.getZoom() });
+            });
 
             const locationIcon = L.divIcon({
                 className: 'location-marker',
@@ -576,6 +493,52 @@
             });
 
             loadRadarData();
+        }
+
+        // NEW: Separate function to set base layer
+        function setBaseLayer(style) {
+            // Remove current base layer
+            if (baseLayer) {
+                map.removeLayer(baseLayer);
+            }
+            
+            // Add new base layer based on style
+            switch(style) {
+                case 'light':
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '© OpenStreetMap contributors, © CARTO',
+                        subdomains: 'abcd',
+                        maxZoom: 20
+                    });
+                    break;
+                case 'standard':
+                    baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors',
+                        maxZoom: 20
+                    });
+                    break;
+                case 'satellite':
+                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                        attribution: '© Esri, © OpenStreetMap contributors',
+                        maxZoom: 20
+                    });
+                    break;
+                case 'terrain':
+                    baseLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenTopoMap, © OpenStreetMap contributors',
+                        maxZoom: 20
+                    });
+                    break;
+                default:
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '© OpenStreetMap contributors, © CARTO',
+                        subdomains: 'abcd',
+                        maxZoom: 20
+                    });
+            }
+            
+            // Add the new base layer
+            baseLayer.addTo(map);
         }
 
         async function saveLocation() {
@@ -660,6 +623,7 @@
             }
         }
 
+        // UPDATED: Radar data loading with improved layer management
         async function loadRadarData() {
             try {
                 const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
@@ -694,7 +658,7 @@
                 });
 
                 animationPosition = 0;
-                updateTimeDisplay();
+                updateTimeDisplay(); // IMPORTANT: Call this to update time displays
                 startAnimation();
                 
             } catch (error) {
@@ -724,102 +688,9 @@
                         radarLayers[animationPosition].setOpacity(0.6);
                     }
                     
-                    updateTimeDisplay();
+                    updateTimeDisplay(); // Update time displays during animation
                 }
             }, 450); // Good speed - not too fast, not too slow
-        }
-
-        function transitionToNextFrame() {
-            if (isTransitioning || radarLayers.length === 0) return;
-            
-            isTransitioning = true;
-            
-            const nextPosition = (animationPosition + 1) % radarLayers.length;
-            nextLayer = radarLayers[nextPosition];
-            
-            // CRITICAL: Pre-load the next layer completely before starting transition
-            nextLayer.setOpacity(0);
-            
-            // Add next layer to map if not already there
-            if (!map.hasLayer(nextLayer)) {
-                nextLayer.addTo(map);
-            }
-            
-            // Wait for tiles to load completely before starting transition
-            let tilesLoaded = false;
-            let loadTimeout;
-            
-            const startTransition = () => {
-                if (tilesLoaded) return; // Prevent double execution
-                tilesLoaded = true;
-                clearTimeout(loadTimeout);
-                
-                // Now both layers are on the map - start smooth crossfade
-                const startTime = performance.now();
-                const transitionDuration = 400; // Longer transition for smoother effect
-                
-                function animateTransition(currentTime) {
-                    const elapsed = currentTime - startTime;
-                    const progress = Math.min(elapsed / transitionDuration, 1);
-                    
-                    // Smooth easing
-                    const easedProgress = 1 - Math.pow(1 - progress, 2);
-                    
-                    // Crossfade: old fades out while new fades in simultaneously
-                    if (activeLayer && map.hasLayer(activeLayer)) {
-                        activeLayer.setOpacity(0.6 * (1 - easedProgress));
-                    }
-                    
-                    if (nextLayer && map.hasLayer(nextLayer)) {
-                        nextLayer.setOpacity(0.6 * easedProgress);
-                    }
-                    
-                    if (progress < 1) {
-                        requestAnimationFrame(animateTransition);
-                    } else {
-                        // Transition complete - clean up old layer
-                        if (activeLayer && activeLayer !== nextLayer && map.hasLayer(activeLayer)) {
-                            map.removeLayer(activeLayer);
-                        }
-                        
-                        activeLayer = nextLayer;
-                        nextLayer = null;
-                        animationPosition = nextPosition;
-                        isTransitioning = false;
-                        
-                        updateTimeDisplay();
-                    }
-                }
-                
-                requestAnimationFrame(animateTransition);
-            };
-            
-            // Listen for tile load events
-            const onTileLoad = () => {
-                nextLayer.off('tileload', onTileLoad);
-                nextLayer.off('tileerror', onTileLoad);
-                startTransition();
-            };
-            
-            nextLayer.on('tileload', onTileLoad);
-            nextLayer.on('tileerror', onTileLoad);
-            
-            // Fallback timeout in case tiles don't trigger events
-            loadTimeout = setTimeout(() => {
-                nextLayer.off('tileload', onTileLoad);
-                nextLayer.off('tileerror', onTileLoad);
-                startTransition();
-            }, 500);
-            
-            // Force tile loading by setting a minimal opacity change
-            setTimeout(() => {
-                if (map.hasLayer(nextLayer)) {
-                    nextLayer.setOpacity(0.001);
-                    setTimeout(() => {
-                        nextLayer.setOpacity(0);
-                    }, 10);
-                }
-            }, 50);
         }
 
         function toggleAnimation() {
@@ -833,6 +704,7 @@
             }
         }
 
+        // UPDATED: Time display function with better error handling
         function updateTimeDisplay() {
             if (radarData && radarData[animationPosition]) {
                 const time = new Date(radarData[animationPosition].time * 1000);
@@ -852,9 +724,17 @@
                 
                 if (timeDisplay) timeDisplay.textContent = timeText;
                 if (timeMini) timeMini.textContent = timeText;
+            } else {
+                // Fallback if no radar data
+                const timeDisplay = document.getElementById('time-display');
+                const timeMini = document.getElementById('time-display-mini');
+                
+                if (timeDisplay) timeDisplay.textContent = 'Loading...';
+                if (timeMini) timeMini.textContent = 'Loading...';
             }
         }
 
+        // UPDATED: Color scheme change with settings save
         function changeColorScheme(colorScheme) {
             if (!map || radarLayers.length === 0) return;
             
@@ -879,57 +759,43 @@
                 radarLayer.addTo(map);
                 radarLayers.push(radarLayer);
             });
+
+            // Save to settings
+            saveSettings({ colorScheme: colorScheme });
         }
 
+        // UPDATED: Map style change with proper radar preservation and settings save
         function changeMapStyle(style) {
             if (!map) return;
             
-            // Save the setting
-            const savedSettings = getSavedSettings();
-            saveSettings(savedSettings.colorScheme, style);
+            // Store current radar state before changing base layer
+            const currentRadarOpacities = radarLayers.map(layer => layer.options.opacity);
+            const wasAnimating = animating;
             
-            if (baseLayer && map.hasLayer(baseLayer)) {
-                map.removeLayer(baseLayer);
+            // Change the base layer using the new function
+            setBaseLayer(style);
+            
+            // Ensure radar layers are still on top and maintain their opacity
+            radarLayers.forEach((layer, index) => {
+                if (map.hasLayer(layer)) {
+                    // Remove and re-add to ensure proper layering
+                    map.removeLayer(layer);
+                    layer.addTo(map);
+                    // Restore the opacity
+                    layer.setOpacity(currentRadarOpacities[index] || 0);
+                }
+            });
+            
+            // Restore animation state
+            if (wasAnimating) {
+                startAnimation();
             }
             
-            switch(style) {
-                case 'light':
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'standard':
-                    baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors',
-                        maxZoom: 19
-                    });
-                    break;
-                case 'satellite':
-                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                        attribution: '© Esri, Maxar, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
-                        maxZoom: 18
-                    });
-                    break;
-                case 'terrain':
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-                    break;
-                default:
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-            }
-            
-            baseLayer.addTo(map);
+            // Save to settings
+            saveSettings({ mapStyle: style });
         }
 
+        // Cardinal direction conversion function (unchanged)
         function degreesToCardinal(degrees) {
             if (degrees === null || degrees === undefined || degrees === 'N/A') {
                 return 'N/A';
@@ -967,6 +833,7 @@
             return `N (${Math.round(normalizedDegrees)}°)`; // fallback
         }
 
+        // UPDATED: Data display with cardinal directions (unchanged but verified)
         function updateDataDisplay(data) {
             // Helper function to check if a value is valid/trackable
             function isValidValue(value) {
@@ -1010,20 +877,21 @@
             }
             document.getElementById('speed').innerText = speedText;
 
-            // Handle direction - NOW WITH CARDINAL DIRECTIONS
+            // Handle direction - WITH CARDINAL DIRECTIONS
             let directionText = '--';
             if (data && isValidValue(data.direction)) {
                 directionText = degreesToCardinal(data.direction);
             }
             document.getElementById('direction').innerText = directionText;
 
-            // Handle bearing - NOW WITH CARDINAL DIRECTIONS
+            // Handle bearing - WITH CARDINAL DIRECTIONS
             let bearingText = '--';
             if (data && isValidValue(data.bearing)) {
                 bearingText = degreesToCardinal(data.bearing);
             }
             document.getElementById('bearing').innerText = bearingText;
-}
+        }
+
         async function fetchAndUpdateData() {
             try {
                 console.log('Fetching data from:', apiDataUrl);
@@ -1083,10 +951,10 @@
                     playPauseBtn.addEventListener('click', toggleAnimation);
                 }
                 
-                // Color scheme dropdown
+                // UPDATED: Color scheme dropdown with settings integration
                 const colorSchemeSelect = document.getElementById('color-scheme');
                 if (colorSchemeSelect) {
-                    // Set saved value
+                    // Set saved value from settings
                     colorSchemeSelect.value = currentSettings.colorScheme;
                     
                     colorSchemeSelect.addEventListener('change', function() {
@@ -1094,10 +962,10 @@
                     });
                 }
                 
-                // Map style dropdown
+                // UPDATED: Map style dropdown with settings integration
                 const mapStyleSelect = document.getElementById('map-style');
                 if (mapStyleSelect) {
-                    // Set saved value
+                    // Set saved value from settings
                     mapStyleSelect.value = currentSettings.mapStyle;
                     
                     mapStyleSelect.addEventListener('change', function() {
