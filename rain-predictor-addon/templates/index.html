@@ -444,7 +444,7 @@
             controls.classList.add('collapsed');
         }
 
-        // UPDATED: Map initialization with zoom persistence from settings
+        // FIXED: Map initialization with proper base layer setup
         function initializeMap() {
             map = L.map('map', {
                 center: [latitude, longitude],
@@ -453,8 +453,17 @@
                 attributionControl: false
             });
 
-            // Set the correct base layer based on saved settings
-            setBaseLayer(currentSettings.mapStyle);
+            // FIXED: Create initial base layer the original way
+            baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap contributors, © CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            // THEN set the correct style if it's different from light
+            if (currentSettings.mapStyle !== 'light') {
+                changeMapStyle(currentSettings.mapStyle);
+            }
 
             // Add scale control to bottom left corner
             L.control.scale({
@@ -464,7 +473,7 @@
                 maxWidth: 150
             }).addTo(map);
 
-            // UPDATED: Save zoom level to settings when it changes
+            // Save zoom level to settings when it changes
             map.on('zoomend', function() {
                 saveSettings({ zoomLevel: map.getZoom() });
             });
@@ -497,8 +506,8 @@
 
         // NEW: Separate function to set base layer
         function setBaseLayer(style) {
-            // Remove current base layer
-            if (baseLayer) {
+            // Remove current base layer if it exists
+            if (baseLayer && map.hasLayer(baseLayer)) {
                 map.removeLayer(baseLayer);
             }
             
@@ -537,10 +546,11 @@
                     });
             }
             
-            // Add the new base layer
-            baseLayer.addTo(map);
+            // Add the new base layer to the map
+            if (map) {
+                baseLayer.addTo(map);
+            }
         }
-
         async function saveLocation() {
             if (!locationMarker) return;
 
