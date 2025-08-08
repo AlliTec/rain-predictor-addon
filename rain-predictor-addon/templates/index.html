@@ -927,8 +927,10 @@
             return `N (${Math.round(normalizedDegrees)}°)`;
         }
 
-        // UPDATED: Data display with cardinal directions (unchanged but verified)
         function updateDataDisplay(data) {
+            // DEBUG: Log the entire API response
+            console.log('API Response:', data);
+            
             // Helper function to check if a value is valid/trackable
             function isValidValue(value) {
                 if (value === null || value === undefined || value === '' || value === '--' || value === 'N/A' || value === 'null') {
@@ -952,6 +954,7 @@
 
             // Handle time to rain
             let timeText = '--';
+            console.log('time_to_rain value:', data?.time_to_rain, 'isValid:', data ? isValidValue(data.time_to_rain) : false);
             if (data && isValidValue(data.time_to_rain)) {
                 timeText = `${data.time_to_rain} min`;
             }
@@ -959,27 +962,31 @@
 
             // Handle distance
             let distanceText = '--';
+            console.log('distance value:', data?.distance, 'isValid:', data ? isValidValue(data.distance) : false);
             if (data && isValidValue(data.distance)) {
                 distanceText = `${data.distance} km`;
             }
             document.getElementById('distance').innerText = distanceText;
 
-            // Handle speed
+            // Handle speed - WITH DEBUG
             let speedText = '--';
+            console.log('speed value:', data?.speed, 'isValid:', data ? isValidValue(data.speed) : false);
             if (data && isValidValue(data.speed)) {
                 speedText = `${data.speed} kph`;
             }
             document.getElementById('speed').innerText = speedText;
 
-            // Handle direction - NOW WITH CARDINAL DIRECTIONS
+            // Handle direction - WITH DEBUG
             let directionText = '--';
+            console.log('direction value:', data?.direction, 'isValid:', data ? isValidValue(data.direction) : false);
             if (data && isValidValue(data.direction)) {
                 directionText = degreesToCardinal(data.direction);
             }
             document.getElementById('direction').innerText = directionText;
 
-            // Handle bearing - NOW WITH CARDINAL DIRECTIONS  
+            // Handle bearing - WITH DEBUG
             let bearingText = '--';
+            console.log('bearing value:', data?.bearing, 'isValid:', data ? isValidValue(data.bearing) : false);
             if (data && isValidValue(data.bearing)) {
                 bearingText = degreesToCardinal(data.bearing);
             }
