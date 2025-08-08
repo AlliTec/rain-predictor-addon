@@ -597,10 +597,23 @@
             if (animationTimer) clearInterval(animationTimer);
             
             animationTimer = setInterval(function() {
-                if (animating && radarLayers.length > 0 && !isTransitioning) {
-                    transitionToNextFrame();
+                if (animating && radarLayers.length > 0) {
+                    // Hide current layer
+                    if (radarLayers[animationPosition]) {
+                        map.removeLayer(radarLayers[animationPosition]);
+                    }
+                    
+                    // Move to next frame
+                    animationPosition = (animationPosition + 1) % radarLayers.length;
+                    
+                    // Show next layer immediately (no fade)
+                    if (radarLayers[animationPosition]) {
+                        radarLayers[animationPosition].addTo(map);
+                    }
+                    
+                    updateTimeDisplay();
                 }
-            }, 1000); // Slower timing for better viewing
+            }, 400); // Slightly faster animation (400ms instead of 500ms)
         }
 
         function transitionToNextFrame() {
