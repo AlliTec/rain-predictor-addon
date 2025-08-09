@@ -423,7 +423,32 @@
         let selectedRainCell = null;
         let rainCellHighlight = null;
         let clickedLocation = null;
+        let autoTrackingHighlight = null;
+        let trackingAnimationTimer = null;
 
+        // Animation and tracking variables
+        let cellTrackingData = {
+            manual: null,
+            automatic: null
+        };
+
+        function formatTimeToRain(minutes) {
+            if (minutes <= 0) return 'NOW';
+            if (minutes < 60) return `${Math.round(minutes)} min`;
+            
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = Math.round(minutes % 60);
+            
+            if (remainingMinutes === 0) {
+                return `${hours}h`;
+            } else if (hours >= 24) {
+                const days = Math.floor(hours / 24);
+                const remainingHours = hours % 24;
+                return remainingHours === 0 ? `${days}d` : `${days}d ${remainingHours}h`;
+            } else {
+                return `${hours}h ${remainingMinutes}m`;
+            }
+        }
         // Manual selection mode functions
         function enableClickSelection() {
             map.on('click', handleRainCellClick);
@@ -449,8 +474,10 @@
             
             if (detectedCell) {
                 selectedRainCell = detectedCell;
-                highlightRainCell(detectedCell);
+                cellTrackingData.manual = detectedCell;
+                highlightRainCell(detectedCell, 'manual');
                 updateTrackingData(detectedCell);
+                startCellTracking();
                 
                 console.log('Rain cell selected at:', clickedLocation, 'Cell data:', detectedCell);
             } else {
@@ -469,6 +496,8 @@
             // Generate simulated rain cell properties
             const cellSize = 0.02 + Math.random() * 0.05; // Random cell size
             const intensity = Math.random() * 100; // Rain intensity 0-100
+            const speed = 8 + Math.random() * 25; // 8-33 kph
+            const direction = Math.random() * 360; // 0-360 degrees
             
             return {
                 center: latlng,
@@ -477,57 +506,177 @@
                     [latlng.lat + cellSize/2, latlng.lng + cellSize/2]
                 ),
                 intensity: intensity,
-                speed: 8 + Math.random() * 25, // 8-33 kph
-                direction: Math.random() * 360, // 0-360 degrees
-                estimatedArea: Math.pow(cellSize * 111, 2) // km²
+                speed: speed,
+                direction: direction,
+                estimatedArea: Math.pow(cellSize * 111, 2), // km²
+                lastUpdate: Date.now()
             };
         }
 
-        function highlightRainCell(cell) {
-            // Create pulsing highlight around the selected rain cell
-            rainCellHighlight = L.circle(cell.center, {
-                radius: 3000 + Math.random() * 2000, // 3-5km radius
-                color: '#ff6b6b',
-                fillColor: '#ff6b6b',
+        function highlightRainCell(cell, mode = 'manual') {
+            const isManual = mode === 'manual';
+            const color = isManual ? '#ff6b6b' : '#48bb78';
+            const radius = 3000 + Math.random() * 2000; // 3-5km radius
+            
+            // Create the appropriate highlight variable
+            const highlight = L.circle(cell.center, {
+                radius: radius,
+                color: color,
+                fillColor: color,
                 fillOpacity: 0.1,
                 weight: 3,
                 opacity: 0.8,
                 dashArray: '10,5',
-                className: 'rain-cell-highlight'
+                className: isManual ? 'rain-cell-highlight' : 'auto-tracking-highlight'
             }).addTo(map);
             
-            // Add pulsing animation
-            let pulseOpacity = 0.8;
-            let increasing = false;
-            
-            const pulseInterval = setInterval(() => {
-                if (!rainCellHighlight || !map.hasLayer(rainCellHighlight)) {
-                    clearInterval(pulseInterval);
-                    return;
-                }
-                
-                if (increasing) {
-                    pulseOpacity += 0.05;
-                    if (pulseOpacity >= 1) increasing = false;
-                } else {
-                    pulseOpacity -= 0.05;
-                    if (pulseOpacity <= 0.3) increasing = true;
-                }
-                
-                rainCellHighlight.setStyle({ opacity: pulseOpacity });
-            }, 100);
+            // Add movement arrow showing direction
+            const arrow = createMovementArrow(cell.center, cell.direction, cell.speed, color);
+            arrow.addTo(map);
             
             // Add center marker
             const cellMarker = L.circleMarker(cell.center, {
                 radius: 8,
-                color: '#ff6b6b',
+                color: color,
                 fillColor: '#ffffff',
                 fillOpacity: 1,
                 weight: 2
             }).addTo(map);
             
-            // Store marker reference for cleanup
-            rainCellHighlight._centerMarker = cellMarker;
+            // Store references for cleanup
+            highlight._centerMarker = cellMarker;
+            highlight._arrow = arrow;
+            highlight._mode = mode;
+            
+            // Store in appropriate variable
+            if (isManual) {
+                rainCellHighlight = highlight;
+            } else {
+                autoTrackingHighlight = highlight;
+            }
+            
+            return highlight;
+        }
+
+        function createMovementArrow(center, direction, speed, color) {
+            // Calculate arrow end point based on direction and speed
+            const arrowLength = Math.min(0.01, speed / 1000); // Scale arrow by speed
+            const directionRad = (direction - 90) * Math.PI / 180; // Convert to radians, adjust for map orientation
+            
+            const endLat = center.lat + Math.cos(directionRad) * arrowLength;
+            const endLng = center.lng + Math.sin(directionRad) * arrowLength;
+            
+            // Create arrow polyline
+            const arrow = L.polyline([
+                [center.lat, center.lng],
+                [endLat, endLng]
+            ], {
+                color: color,
+                weight: 4,
+                opacity: 0.9
+            });
+            
+            // Add arrowhead
+            const arrowHead = L.circleMarker([endLat, endLng], {
+                radius: 6,
+                color: color,
+                fillColor: color,
+                fillOpacity: 1,
+                weight: 2
+            });
+            
+            // Group arrow parts
+            const arrowGroup = L.layerGroup([arrow, arrowHead]);
+            arrow._arrowHead = arrowHead;
+            
+            return arrowGroup;
+        }
+
+        function startCellTracking() {
+            // Clear existing tracking animation
+            if (trackingAnimationTimer) {
+                clearInterval(trackingAnimationTimer);
+            }
+            
+            // Start dynamic tracking animation
+            trackingAnimationTimer = setInterval(() => {
+                updateCellPositions();
+            }, 2000); // Update every 2 seconds
+        }
+
+        function updateCellPositions() {
+            const now = Date.now();
+            
+            // Update manual tracking cell
+            if (cellTrackingData.manual && rainCellHighlight) {
+                const cell = cellTrackingData.manual;
+                const timeDiff = (now - cell.lastUpdate) / 1000; // seconds
+                
+                // Calculate new position based on speed and direction
+                const newPosition = calculateNewCellPosition(cell.center, cell.direction, cell.speed, timeDiff);
+                
+                // Update cell data
+                cell.center = newPosition;
+                cell.lastUpdate = now;
+                
+                // Update visual elements
+                updateHighlightPosition(rainCellHighlight, newPosition, cell);
+                
+                // Recalculate tracking data
+                updateTrackingData(cell);
+            }
+            
+            // Update automatic tracking cell
+            if (cellTrackingData.automatic && autoTrackingHighlight) {
+                const cell = cellTrackingData.automatic;
+                const timeDiff = (now - cell.lastUpdate) / 1000; // seconds
+                
+                const newPosition = calculateNewCellPosition(cell.center, cell.direction, cell.speed, timeDiff);
+                
+                cell.center = newPosition;
+                cell.lastUpdate = now;
+                
+                updateHighlightPosition(autoTrackingHighlight, newPosition, cell);
+                
+                // Update automatic tracking data if not in manual mode
+                if (!manualMode) {
+                    updateTrackingData(cell);
+                }
+            }
+        }
+
+        function calculateNewCellPosition(currentPos, direction, speedKph, timeSeconds) {
+            // Convert speed from kph to degrees per second (rough approximation)
+            const speedDegPerSec = (speedKph / 3600) / 111; // 1 degree ≈ 111 km
+            const distance = speedDegPerSec * timeSeconds;
+            
+            // Convert direction to radians and adjust for map orientation
+            const directionRad = (direction - 90) * Math.PI / 180;
+            
+            const newLat = currentPos.lat + Math.cos(directionRad) * distance;
+            const newLng = currentPos.lng + Math.sin(directionRad) * distance;
+            
+            return L.latLng(newLat, newLng);
+        }
+
+        function updateHighlightPosition(highlight, newPosition, cell) {
+            if (!highlight || !map.hasLayer(highlight)) return;
+            
+            // Update circle position
+            highlight.setLatLng(newPosition);
+            
+            // Update center marker
+            if (highlight._centerMarker) {
+                highlight._centerMarker.setLatLng(newPosition);
+            }
+            
+            // Update arrow
+            if (highlight._arrow) {
+                map.removeLayer(highlight._arrow);
+                const color = highlight._mode === 'manual' ? '#ff6b6b' : '#48bb78';
+                highlight._arrow = createMovementArrow(newPosition, cell.direction, cell.speed, color);
+                highlight._arrow.addTo(map);
+            }
         }
 
         function updateTrackingData(cell) {
@@ -539,22 +688,52 @@
             const bearing = calculateBearing(cell.center, userLocation);
             
             // Simulate time to arrival based on distance and speed
-            const timeToRain = Math.max(1, Math.round((distance / cell.speed) * 60)); // Convert to minutes
+            const timeToRainMinutes = Math.max(1, (distance / cell.speed) * 60); // Convert to minutes
             
             // Update mode indicator
             const indicator = document.getElementById('mode-indicator');
-            indicator.textContent = `Tracking selected rain cell (${cell.estimatedArea.toFixed(1)} km²)`;
+            if (manualMode) {
+                indicator.textContent = `Tracking selected rain cell (${cell.estimatedArea.toFixed(1)} km²)`;
+            } else {
+                indicator.textContent = `Auto-tracking nearest rain cell (${cell.estimatedArea.toFixed(1)} km²)`;
+            }
             
-            // Update data panel
+            // Update data panel with formatted time
             updateDataDisplay({
-                time_to_rain: timeToRain,
+                time_to_rain: timeToRainMinutes,
                 distance: distance.toFixed(1),
                 speed: cell.speed.toFixed(1),
                 direction: cell.direction,
                 bearing: bearing,
-                mode: 'manual',
+                mode: manualMode ? 'manual' : 'automatic',
                 cell_intensity: cell.intensity
             });
+        }
+
+        // Initialize automatic tracking for demo
+        function initializeAutomaticTracking() {
+            if (!manualMode && !autoTrackingHighlight) {
+                // Create a simulated automatic rain cell
+                const userLocation = locationMarker.getLatLng();
+                
+                // Place automatic cell at a random nearby location
+                const offsetLat = (Math.random() - 0.5) * 0.1; // ±0.05 degrees
+                const offsetLng = (Math.random() - 0.5) * 0.1;
+                
+                const autoCell = {
+                    center: L.latLng(userLocation.lat + offsetLat, userLocation.lng + offsetLng),
+                    intensity: 50 + Math.random() * 50,
+                    speed: 15 + Math.random() * 15,
+                    direction: Math.random() * 360,
+                    estimatedArea: 5 + Math.random() * 15,
+                    lastUpdate: Date.now()
+                };
+                
+                cellTrackingData.automatic = autoCell;
+                highlightRainCell(autoCell, 'automatic');
+                updateTrackingData(autoCell);
+                startCellTracking();
+            }
         }
 
         function calculateBearing(from, to) {
@@ -596,10 +775,28 @@
                 if (rainCellHighlight._centerMarker) {
                     map.removeLayer(rainCellHighlight._centerMarker);
                 }
+                if (rainCellHighlight._arrow) {
+                    map.removeLayer(rainCellHighlight._arrow);
+                }
                 map.removeLayer(rainCellHighlight);
                 rainCellHighlight = null;
             }
             selectedRainCell = null;
+            cellTrackingData.manual = null;
+        }
+
+        function clearAutoTrackingHighlight() {
+            if (autoTrackingHighlight) {
+                if (autoTrackingHighlight._centerMarker) {
+                    map.removeLayer(autoTrackingHighlight._centerMarker);
+                }
+                if (autoTrackingHighlight._arrow) {
+                    map.removeLayer(autoTrackingHighlight._arrow);
+                }
+                map.removeLayer(autoTrackingHighlight);
+                autoTrackingHighlight = null;
+            }
+            cellTrackingData.automatic = null;
         }
 
         // Mock data for demonstration
@@ -890,12 +1087,14 @@
             const timeElement = document.getElementById('time-to-rain');
             const modeText = data.mode === 'manual' ? '(Manual)' : '(Auto)';
             
-            // Handle time to rain
-            if (data.time_to_rain <= 0) {
+            // Handle time to rain with improved formatting
+            const formattedTime = formatTimeToRain(data.time_to_rain || 0);
+            
+            if (formattedTime === 'NOW') {
                 timeElement.innerText = 'NOW';
                 timeElement.classList.add('now');
             } else {
-                timeElement.innerText = data.time_to_rain ? `${data.time_to_rain} min` : '--';
+                timeElement.innerText = formattedTime;
                 timeElement.classList.remove('now');
             }
             
@@ -963,6 +1162,11 @@
                 indicator.textContent = 'Click on a rain cell to track it';
                 map.getContainer().style.cursor = 'pointer';
                 
+                // Hide automatic tracking when in manual mode
+                if (autoTrackingHighlight) {
+                    autoTrackingHighlight.setStyle({ opacity: 0.3, fillOpacity: 0.05 });
+                }
+                
                 // Enable click selection
                 enableClickSelection();
             } else {
@@ -972,15 +1176,22 @@
                 indicator.style.display = 'none';
                 map.getContainer().style.cursor = '';
                 
+                // Show automatic tracking again
+                if (autoTrackingHighlight) {
+                    autoTrackingHighlight.setStyle({ opacity: 0.8, fillOpacity: 0.1 });
+                }
+                
                 // Disable click selection and clear any selected cell
                 disableClickSelection();
                 clearRainCellSelection();
                 
-                // Return to automatic mode data
-                updateDataDisplay({
-                    ...mockData,
-                    mode: 'automatic'
-                });
+                // Return to automatic mode data or initialize if needed
+                if (cellTrackingData.automatic) {
+                    updateTrackingData(cellTrackingData.automatic);
+                } else {
+                    // Initialize automatic tracking
+                    setTimeout(initializeAutomaticTracking, 1000);
+                }
             }
         }
 
@@ -988,6 +1199,11 @@
         document.addEventListener('DOMContentLoaded', function() {
             initializeMap();
             updateDataDisplay({...mockData, mode: 'automatic'});
+            
+            // Initialize automatic tracking after map loads
+            setTimeout(() => {
+                initializeAutomaticTracking();
+            }, 2000);
             
             // Control panel event listeners
             const controlsPanel = document.getElementById('animation-controls');
