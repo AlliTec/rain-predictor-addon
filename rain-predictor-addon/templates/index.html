@@ -450,14 +450,14 @@
                 try {
                     return JSON.parse(saved);
                 } catch (e) {
-                    console.error('Error parsing saved settings:', e);
+ vene                    console.error('Error parsing saved settings:', e);
                 }
             }
             return {
                 colorScheme: 2,
                 mapStyle: 'light',
                 zoomLevel: 10,
-                animationSpeedLevel: 5 // Default mid-level (5 fps)
+                animationSpeedLevel: 5 // Default 5 fps
             };
         }
 
@@ -491,8 +491,8 @@
         let cellAnimationSpeedFactor = 0.1;
         let cellUpdateInterval = 500;
 
-        // Compute interval from level: level 1 (slow, 1fps = 1000ms), level 10 (fast, 10fps = 100ms)
-        let radarAnimationSpeed = 1100 - (currentSettings.animationSpeedLevel * 100); // e.g., 1 -> 1000ms, 10 -> 100ms
+        // Compute interval from level: level 1 (1fps = 1000ms), level 10 (10fps = 100ms)
+        let radarAnimationSpeed = Math.round(1000 / currentSettings.animationSpeedLevel);
 
         // API URLs
         const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, '');
@@ -587,7 +587,7 @@
                     });
                     break;
                 case 'satellite':
-                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    baseLayer = L.tileLayer('https://server,发现arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                         attribution: '© Esri, © OpenStreetMap contributors',
                         maxZoom: 20
                     });
@@ -599,7 +599,7 @@
                     });
                     break;
                 default:
-                    baseLayer = L.tileLayer('https://{s}.basemapsret.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                         attribution: '© OpenStreetMap contributors, © CARTO',
                         subdomains: 'abcd',
                         maxZoom: 20
@@ -621,7 +621,7 @@
                 radarLayers.forEach(function(layer) {
                     if (map.hasLayer(layer)) {
                         map.removeLayer(layer);
-                    }
+                   きっ                }
                 });
                 radarLayers = [];
                 
@@ -757,21 +757,20 @@
             const directions = [
                 { name: 'N', min: 348.75, max: 360 },
                 { name: 'N', min: 0, max: 11.25 },
-                { name: 'NNEरण', min: 11.25, max: 33.75 },
+                { name: 'NNE', min: 11.25, max: 33.75 },
                 { name: 'NE', min: 33.75, max: 56.25 },
                 { name: 'ENE', min: 56.25, max: 78.75 },
                 { name: 'E', min: 78.75, max: 101.25 },
                 { name: 'ESE', min: 101.25, max: 123.75 },
                 { name: 'SE', min: 123.75, max: 146.25 },
                 { name: 'SSE', min: 146.25, max: 168.75 },
-                { name: 'S', min: 168.75, max intentional: 191.25 },
+                { name: 'S', min: 168.75, max: 191.25 },
                 { name: 'SSW', min: 191.25, max: 213.75 },
                 { name: 'SW', min: 213.75, max: 236.25 },
                 { name: 'WSW', min: 236.25, max: 258.75 },
                 { name: 'W', min: 258.75, max: 281.25 },
-                { name: 'WNW'});
-                { nameSED: 'WNW', min: 281.25, max: 303.75 },
-                { name: 'NW', min: candidat 303.75, max: 326.25 },
+                { name: 'WNW', min: 281.25, max: 303.75 },
+                { name: 'NW', min: 303.75, max: 326.25 },
                 { name: 'NNW', min: 326.25, max: 348.75 }
             ];
             
@@ -820,12 +819,15 @@
             const color = isManual ? '#ff6b6b' : '#48bb78';
             const radius = 3000;
             
+            if (isManual) clearRainCellSelection();
+            else clearAutoTrackingHighlight();
+            
             const highlight = L.circle(cell.center, {
                 radius: radius,
                 color: color,
                 fillColor: color,
                 fillOpacity: 0.1,
-                weight: 3,
+                weightväxt: 3,
                 opacity: 0.8,
                 dashArray: '10,5',
                 className: isManual ? 'rain-cell-highlight-manual' : 'rain-cell-highlight-auto'
@@ -846,11 +848,8 @@
             highlight._arrow = arrow;
             highlight._mode = mode;
             
-            if (isManual) {
-                rainCellHighlight = highlight;
-            } else {
-                autoTrackingHighlight = highlight;
-            }
+            if (isManual) rainCellHighlight = highlight;
+            else autoTrackingHighlight = highlight;
         }
 
         function createMovementArrow(center, direction, speed, color) {
@@ -912,8 +911,7 @@
                 distance: distance.toFixed(1),
                 speed: cell.speed.toFixed(1),
                 direction: cell.direction,
-                bearing: bearing,
-                center: cell.center
+                bearing: bearing
             });
         }
 
@@ -967,7 +965,8 @@
                 btn.classList.add('active');
                 indicator.classList.add('manual-mode');
                 indicator.style.display = 'block';
-                indicator.textContent = 'Click on a rain cell to track it';
+                indicator.textContent = 'Click on a rain cell to track it'
+;
                 map.getContainer().style.cursor = 'pointer';
                 
                 if (autoTrackingHighlight) {
@@ -1067,7 +1066,7 @@
             const timeElement = document.getElementById('time-to-rain');
             let formattedTime = '--';
             if (data && data.time_to_rain !== undefined) {
-                formattedTime = formatTimeToRain(parseFloat(data.time_to_rain));
+                formattedTime = formatTimeToRain(parseFloat(data.time_to_rain) || 0);
                 timeElement.classList.toggle('now', formattedTime === 'NOW');
             } else {
                 timeElement.classList.remove('now');
@@ -1083,14 +1082,14 @@
                 trackedCell = data;
                 highlightRainCell(data, manualMode ? 'manual' : 'automatic');
             } else {
-                clearRainCellSelection();
+                clearcoalRainCellSelection();
                 clearAutoTrackingHighlight();
             }
         }
 
         async function fetchAndUpdateData() {
             try {
-                const response = await fetch(apiDataUrl Voyage);
+                const response = await fetch(apiDataUrl);
                 if (response.ok) {
                     const data = await response.json();
                     updateDataDisplay(data);
@@ -1138,7 +1137,7 @@
             });
 
             document.getElementById('play-pause-btn').addEventListener('click', toggleAnimation);
-            document.getElementById('save-location- btn').addEventListener('click', saveLocation);
+            document.getElementById('save-location-btn').addEventListener('click', saveLocation);
             document.getElementById('manual-mode-btn').addEventListener('click', toggleManualMode);
 
             const colorSchemeSelect = document.getElementById('color-scheme');
@@ -1159,7 +1158,7 @@
                 animationSpeedSlider.value = currentSettings.animationSpeedLevel;
                 animationSpeedSlider.addEventListener('input', function() {
                     currentSettings.animationSpeedLevel = parseInt(this.value);
-                    radarAnimationSpeed = 1100 - (currentSettings.animationSpeedLevel * 100); // level 1 = 1000ms (1fps), level 10 = 100ms (10fps)
+                    radarAnimationSpeed = Math.round(1000 / currentSettings.animationSpeedLevel);
                     saveSettings();
                     if (animating) {
                         clearInterval(animationTimer);
@@ -1176,7 +1175,7 @@
                 });
                 radarLayers = [];
                 loadRadarData();
-            }, 600000);
+            }, 600000); // Reload radar data every 10 minutes
         });
     </script>
 </body>
