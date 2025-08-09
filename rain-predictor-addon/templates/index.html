@@ -435,7 +435,7 @@
                 <label class="control-label" for="animation-speed">Animation Speed</label>
                 <div class="slider-container">
                     <span class="slider-label">Slow</span>
-                    <input type="range" id="animation-speed" min="1" max="10" step="1">
+                    <input type="range" id="animation-speed" min="1" max="10" value="5" step="1">
                     <span class="slider-label">Fast</span>
                 </div>
             </div>
@@ -450,7 +450,7 @@
                 try {
                     return JSON.parse(saved);
                 } catch (e) {
- vene                    console.error('Error parsing saved settings:', e);
+                    console.error('Error parsing saved settings:', e);
                 }
             }
             return {
@@ -587,7 +587,7 @@
                     });
                     break;
                 case 'satellite':
-                    baseLayer = L.tileLayer('https://server,发现arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                         attribution: '© Esri, © OpenStreetMap contributors',
                         maxZoom: 20
                     });
@@ -621,7 +621,7 @@
                 radarLayers.forEach(function(layer) {
                     if (map.hasLayer(layer)) {
                         map.removeLayer(layer);
-                   きっ                }
+                    }
                 });
                 radarLayers = [];
                 
@@ -788,10 +788,6 @@
             const deltaTime = (now - lastAnimationTime) / 1000;
             lastAnimationTime = now;
 
-            if (animating && radarLayers.length > 0) {
-                // Radar animation handled by setInterval
-            }
-
             if (trackedCell && trackedCell.center && trackedCell.speed && trackedCell.direction && (now - lastCellUpdateTime) >= cellUpdateInterval) {
                 updateCellPosition(trackedCell, manualMode ? rainCellHighlight : autoTrackingHighlight, deltaTime, manualMode ? 'manual' : 'automatic');
                 lastCellUpdateTime = now;
@@ -827,7 +823,7 @@
                 color: color,
                 fillColor: color,
                 fillOpacity: 0.1,
-                weightväxt: 3,
+                weight: 3,
                 opacity: 0.8,
                 dashArray: '10,5',
                 className: isManual ? 'rain-cell-highlight-manual' : 'rain-cell-highlight-auto'
@@ -965,8 +961,7 @@
                 btn.classList.add('active');
                 indicator.classList.add('manual-mode');
                 indicator.style.display = 'block';
-                indicator.textContent = 'Click on a rain cell to track it'
-;
+                indicator.textContent = 'Click on a rain cell to track it';
                 map.getContainer().style.cursor = 'pointer';
                 
                 if (autoTrackingHighlight) {
@@ -1082,7 +1077,7 @@
                 trackedCell = data;
                 highlightRainCell(data, manualMode ? 'manual' : 'automatic');
             } else {
-                clearcoalRainCellSelection();
+                clearRainCellSelection();
                 clearAutoTrackingHighlight();
             }
         }
