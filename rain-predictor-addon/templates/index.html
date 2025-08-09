@@ -274,6 +274,92 @@
             transform: none;
         }
 
+        /* Manual selection mode button */
+        #manual-mode-btn {
+            background: #4299e1;
+            color: white;
+            position: absolute;
+            top: 60px;
+            right: 10px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        #manual-mode-btn:hover {
+            background: #3182ce;
+            transform: translateY(-1px);
+        }
+
+        #manual-mode-btn.active {
+            background: #e53e3e;
+            animation: pulse-button 2s infinite;
+        }
+
+        @keyframes pulse-button {
+            0% { box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+            50% { box-shadow: 0 2px 15px rgba(229, 62, 62, 0.4); }
+            100% { box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        }
+
+        /* Selection rectangle styling */
+        .selection-rectangle {
+            fill: rgba(66, 153, 225, 0.2);
+            stroke: #4299e1;
+            stroke-width: 2;
+            stroke-dasharray: 5,5;
+        }
+
+        /* Auto-tracking highlight styling */
+        .auto-tracking-highlight {
+            fill: rgba(72, 187, 120, 0.15);
+            stroke: #48bb78;
+            stroke-width: 3;
+            stroke-dasharray: 10,5;
+            animation: tracking-pulse 3s infinite;
+        }
+
+        @keyframes tracking-pulse {
+            0% { 
+                stroke-opacity: 0.8;
+                fill-opacity: 0.15;
+            }
+            50% { 
+                stroke-opacity: 1;
+                fill-opacity: 0.25;
+            }
+            100% { 
+                stroke-opacity: 0.8;
+                fill-opacity: 0.15;
+            }
+        }
+
+        /* Mode indicator */
+        .mode-indicator {
+            position: absolute;
+            top: 110px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .mode-indicator.manual-mode {
+            display: block;
+            background: rgba(229, 62, 62, 0.9);
+        }
+
         /* Highlight NOW state */
         .data-value.now {
             color: #ff6b6b !important;
@@ -291,6 +377,8 @@
 
     <div id="map"></div>
     <button class="control-btn" id="save-location-btn">Save Location</button>
+    <button class="control-btn" id="manual-mode-btn">Manual Select</button>
+    <div class="mode-indicator" id="mode-indicator">Click and drag to select rain cell</div>
 
     <div id="data-panel">
         <div class="data-item"><div class="data-value" id="time-to-rain">--</div><div class="data-label">TIME TO RAIN</div></div>
@@ -441,6 +529,14 @@
         let currentColorScheme = currentSettings.colorScheme;
         let baseLayer;
         let locationMarker;
+        
+        // Manual selection mode variables
+        let manualMode = false;
+        let isDrawing = false;
+        let selectionRectangle = null;
+        let selectionBounds = null;
+        let drawStartPoint = null;
+        let autoTrackingHighlight = null;
 
         console.log('Current URL:', currentUrl);
         console.log('Base URL:', baseUrl);
@@ -523,6 +619,213 @@
             });
 
             loadRadarData();
+        }
+
+        // Manual selection mode functions
+        function toggleManualMode() {
+            manualMode = !manualMode;
+            const btn = document.getElementById('manual-mode-btn');
+            const indicator = document.getElementById('mode-indicator');
+            
+            if (manualMode) {
+                btn.textContent = 'Exit Manual';
+                btn.classList.add('active');
+                indicator.classList.add('manual-mode');
+                map.getContainer().style.cursor = 'crosshair';
+                
+                // Enable drawing interactions
+                enableDrawing();
+            } else {
+                btn.textContent = 'Manual Select';
+                btn.classList.remove('active');
+                indicator.classList.remove('manual-mode');
+                map.getContainer().style.cursor = '';
+                
+                // Disable drawing and clear selection
+                disableDrawing();
+                clearSelection();
+            }
+        }
+
+        function enableDrawing() {
+            map.on('mousedown', startDrawing);
+            map.on('mousemove', updateDrawing);
+            map.on('mouseup', finishDrawing);
+            
+            // Disable map dragging while drawing
+            map.dragging.disable();
+        }
+
+        function disableDrawing() {
+            map.off('mousedown', startDrawing);
+            map.off('mousemove', updateDrawing);
+            map.off('mouseup', finishDrawing);
+            
+            // Re-enable map dragging
+            map.dragging.enable();
+        }
+
+        function startDrawing(e) {
+            if (!manualMode) return;
+            
+            isDrawing = true;
+            drawStartPoint = e.latlng;
+            
+            // Clear any existing selection
+            clearSelection();
+            
+            // Create initial rectangle
+            selectionRectangle = L.rectangle([drawStartPoint, drawStartPoint], {
+                className: 'selection-rectangle',
+                fillOpacity: 0.2,
+                weight: 2,
+                dashArray: '5,5',
+                color: '#4299e1'
+            }).addTo(map);
+        }
+
+        function updateDrawing(e) {
+            if (!manualMode || !isDrawing || !selectionRectangle) return;
+            
+            // Update rectangle bounds
+            const bounds = L.latLngBounds(drawStartPoint, e.latlng);
+            selectionRectangle.setBounds(bounds);
+        }
+
+        function finishDrawing(e) {
+            if (!manualMode || !isDrawing) return;
+            
+            isDrawing = false;
+            
+            if (selectionRectangle) {
+                selectionBounds = selectionRectangle.getBounds();
+                
+                // Send selection to backend
+                sendManualSelection(selectionBounds);
+                
+                console.log('Selection completed:', {
+                    north: selectionBounds.getNorth(),
+                    south: selectionBounds.getSouth(),
+                    east: selectionBounds.getEast(),
+                    west: selectionBounds.getWest()
+                });
+            }
+        }
+
+        function clearSelection() {
+            if (selectionRectangle) {
+                map.removeLayer(selectionRectangle);
+                selectionRectangle = null;
+                selectionBounds = null;
+            }
+        }
+
+        // Auto-tracking highlight functions
+        function updateAutoTrackingHighlight(bounds) {
+            // Clear existing highlight
+            clearAutoTrackingHighlight();
+            
+            if (bounds && bounds.north && bounds.south && bounds.east && bounds.west) {
+                const latLngBounds = L.latLngBounds(
+                    [bounds.south, bounds.west],
+                    [bounds.north, bounds.east]
+                );
+                
+                autoTrackingHighlight = L.rectangle(latLngBounds, {
+                    className: 'auto-tracking-highlight',
+                    fillOpacity: 0.15,
+                    weight: 3,
+                    dashArray: '10,5',
+                    color: '#48bb78',
+                    interactive: false // Don't interfere with map interactions
+                }).addTo(map);
+                
+                console.log('Auto-tracking highlight updated:', bounds);
+            }
+        }
+
+        function clearAutoTrackingHighlight() {
+            if (autoTrackingHighlight) {
+                map.removeLayer(autoTrackingHighlight);
+                autoTrackingHighlight = null;
+            }
+        }
+
+        async function sendManualSelection(bounds) {
+            try {
+                const selectionData = {
+                    mode: 'manual',
+                    selection: {
+                        north: bounds.getNorth(),
+                        south: bounds.getSouth(),
+                        east: bounds.getEast(),
+                        west: bounds.getWest()
+                    }
+                };
+
+                console.log('Sending manual selection:', selectionData);
+
+                const response = await fetch(`${baseUrl}/api/manual_selection`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(selectionData)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Manual selection response:', result);
+                    
+                    // Update display immediately
+                    setTimeout(fetchAndUpdateData, 500);
+                } else {
+                    console.error('Failed to send manual selection:', response.status);
+                }
+            } catch (error) {
+                console.error('Error sending manual selection:', error);
+            }
+        }
+
+        // Function to reset to automatic mode (called from backend or timeout)
+        function resetToAutomaticMode() {
+            if (manualMode) {
+                toggleManualMode();
+            }
+        }
+
+        // Enhanced manual mode toggle that handles auto-tracking highlight
+        function toggleManualModeEnhanced() {
+            manualMode = !manualMode;
+            const btn = document.getElementById('manual-mode-btn');
+            const indicator = document.getElementById('mode-indicator');
+            
+            if (manualMode) {
+                btn.textContent = 'Exit Manual';
+                btn.classList.add('active');
+                indicator.classList.add('manual-mode');
+                map.getContainer().style.cursor = 'crosshair';
+                
+                // Hide auto-tracking highlight in manual mode
+                clearAutoTrackingHighlight();
+                
+                // Enable drawing interactions
+                enableDrawing();
+            } else {
+                btn.textContent = 'Manual Select';
+                btn.classList.remove('active');
+                indicator.classList.remove('manual-mode');
+                map.getContainer().style.cursor = '';
+                
+                // Disable drawing and clear manual selection
+                disableDrawing();
+                clearSelection();
+                
+                // Re-fetch data to restore auto-tracking highlight
+                setTimeout(fetchAndUpdateData, 500);
+            }
+        }
         }
 
         function createBaseLayerForStyle(style) {
@@ -943,6 +1246,24 @@
         function updateDataDisplay(data) {
             console.log('API Response:', data);
             
+            // Handle auto-tracking highlight (only in automatic mode)
+            if (!manualMode && data && data.tracking_bounds) {
+                updateAutoTrackingHighlight(data.tracking_bounds);
+            } else if (manualMode) {
+                // Clear auto-tracking highlight in manual mode
+                clearAutoTrackingHighlight();
+            }
+            
+            // Update mode indicator if data includes mode info
+            if (data && data.mode) {
+                const indicator = document.getElementById('mode-indicator');
+                if (data.mode === 'manual' && data.selection) {
+                    indicator.textContent = `Tracking selected area (${Math.round(data.selection.area || 0)} km²)`;
+                } else if (data.mode === 'automatic') {
+                    indicator.textContent = 'Automatic mode - tracking nearest rain';
+                }
+            }
+            
             // Helper function to check if a value is valid/trackable
             function isValidValue(value) {
                 if (value === null || value === undefined || value === '' || value === '--' || value === 'N/A' || value === 'null') {
@@ -1162,6 +1483,12 @@
                 const saveLocationBtn = document.getElementById('save-location-btn');
                 if (saveLocationBtn) {
                     saveLocationBtn.addEventListener('click', saveLocation);
+                }
+
+                // Manual mode button
+                const manualModeBtn = document.getElementById('manual-mode-btn');
+                if (manualModeBtn) {
+                    manualModeBtn.addEventListener('click', toggleManualModeEnhanced);
                 }
                 
             }, 1000);
