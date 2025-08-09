@@ -1125,10 +1125,25 @@
                 const response = await fetch(apiSetLocationUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ latitude: newPos.lat, longitude: newPos.lng })
+                    body: JSON.stringify({ 
+                        latitude: newPos.lat, 
+                        longitude: newPos.lng 
+                    })
                 });
 
                 if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Update local currentLocation
+                    currentLocation.latitude = result.latitude;
+                    currentLocation.longitude = result.longitude;
+                    
+                    // Save to localStorage for persistence
+                    localStorage.setItem('rainPredictor_location', JSON.stringify({
+                        latitude: result.latitude,
+                        longitude: result.longitude
+                    }));
+                    
                     saveBtn.textContent = 'Saved!';
                     saveBtn.style.background = '#48bb78';
                     
@@ -1140,6 +1155,8 @@
                     }, 2000);
 
                     locationMarker.bindPopup(`Location Updated<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
+                    
+                    // Refresh data with new location
                     fetchAndUpdateData();
                 } else {
                     throw new Error('Failed to save location');
@@ -1147,9 +1164,38 @@
             } catch (error) {
                 console.error('Error saving location:', error);
                 saveBtn.textContent = 'Error';
-                saveBtn.disabled = false;
+                saveBtn.style.background = '#e53e3e';
+                setTimeout(() => {
+                    saveBtn.textContent = 'Save Location';
+                    saveBtn.style.background = '#48bb78';
+                    saveBtn.disabled = false;
+                }, 2000);
             }
         }
+
+        // Add this function to load saved location on startup
+        function loadSavedLocation() {
+            const saved = localStorage.getItem('rainPredictor_location');
+            if (saved) {
+                try {
+                    const location = JSON.parse(saved);
+                    if (location.latitude && location.longitude) {
+                        currentLocation.latitude = location.latitude;
+                        currentLocation.longitude = location.longitude;
+                        console.log('Loaded saved location:', currentLocation);
+                    }
+                } catch (e) {
+                    console.error('Error loading saved location:', e);
+                }
+            }
+        }
+
+        // Call loadSavedLocation in the DOMContentLoaded event listener:
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSavedLocation(); // Add this line
+            initializeMap();
+            // ... rest of initialization
+        });
 
         function calculateBearing(from, to) {
             const lat1 = from.lat * Math.PI / 180;
