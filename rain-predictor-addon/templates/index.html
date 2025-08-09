@@ -56,11 +56,10 @@
             color: #aaa; 
         }
 
-        /* Enhanced collapsible animation controls - SHIFTED RIGHT TO CLEAR ZOOM */
         .animation-controls {
             position: absolute;
             top: 10px;
-            left: 70px; /* Shifted right to clear zoom controls */
+            left: 70px;
             background: rgba(255, 255, 255, 0.3);
             border-radius: 8px;
             z-index: 1000;
@@ -75,7 +74,7 @@
         .animation-controls.collapsed {
             background: rgba(255, 255, 255, 0.3);
             padding: 8px;
-            width: 80px; /* FIXED: Wide enough for time display */
+            width: 80px;
             height: 40px;
         }
 
@@ -95,7 +94,6 @@
             background: rgba(255, 255, 255, 0.98);
         }
 
-        /* Control header for collapsed state */
         .controls-header {
             display: flex;
             align-items: center;
@@ -119,7 +117,6 @@
             display: block;
         }
 
-        /* Mini time display for collapsed state */
         .time-display-mini {
             color: #333;
             font-size: 10px;
@@ -138,7 +135,6 @@
             display: block;
         }
 
-        /* Expandable content */
         .controls-content {
             display: none;
             opacity: 0;
@@ -208,7 +204,6 @@
             text-align: center;
         }
 
-        /* Close button for expanded state */
         .close-btn {
             position: absolute;
             top: 5px;
@@ -268,13 +263,6 @@
             transform: translateY(-1px);
         }
 
-        #save-location-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        /* Manual selection mode button - moved to controls panel */
         .manual-mode-control {
             margin-bottom: 10px;
         }
@@ -300,39 +288,6 @@
             background: #e53e3e;
         }
 
-        /* Selection rectangle styling */
-        .selection-rectangle {
-            fill: rgba(66, 153, 225, 0.2);
-            stroke: #4299e1;
-            stroke-width: 2;
-            stroke-dasharray: 5,5;
-        }
-
-        /* Auto-tracking highlight styling */
-        .auto-tracking-highlight {
-            fill: rgba(72, 187, 120, 0.15);
-            stroke: #48bb78;
-            stroke-width: 3;
-            stroke-dasharray: 10,5;
-            animation: tracking-pulse 3s infinite;
-        }
-
-        @keyframes tracking-pulse {
-            0% { 
-                stroke-opacity: 0.8;
-                fill-opacity: 0.15;
-            }
-            50% { 
-                stroke-opacity: 1;
-                fill-opacity: 0.25;
-            }
-            100% { 
-                stroke-opacity: 0.8;
-                fill-opacity: 0.15;
-            }
-        }
-
-        /* Mode indicator */
         .mode-indicator {
             position: absolute;
             top: 60px;
@@ -352,7 +307,26 @@
             background: rgba(229, 62, 62, 0.9);
         }
 
-        /* Highlight NOW state */
+        /* Rain cell highlight animation */
+        .rain-cell-highlight {
+            animation: rain-cell-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes rain-cell-pulse {
+            0% { 
+                stroke-opacity: 0.8;
+                fill-opacity: 0.1;
+            }
+            50% { 
+                stroke-opacity: 1;
+                fill-opacity: 0.2;
+            }
+            100% { 
+                stroke-opacity: 0.8;
+                fill-opacity: 0.1;
+            }
+        }
+
         .data-value.now {
             color: #ff6b6b !important;
             animation: pulse 2s infinite;
@@ -365,11 +339,10 @@
         }
     </style>
 </head>
-<body data-latitude="{{ latitude }}" data-longitude="{{ longitude }}">
-
+<body>
     <div id="map"></div>
     <button class="control-btn" id="save-location-btn">Save Location</button>
-    <div class="mode-indicator" id="mode-indicator">Click and drag to select rain cell</div>
+    <div class="mode-indicator" id="mode-indicator">Click on a rain cell to track it</div>
 
     <div id="data-panel">
         <div class="data-item"><div class="data-value" id="time-to-rain">--</div><div class="data-label">TIME TO RAIN</div></div>
@@ -379,18 +352,14 @@
         <div class="data-item"><div class="data-value" id="bearing">--</div><div class="data-label">BEARING</div></div>
     </div>
 
-    <!-- Enhanced collapsible animation controls with always-visible time -->
     <div class="animation-controls collapsed" id="animation-controls">
-        <!-- Header for collapsed state with time display -->
         <div class="controls-header">
             <div class="controls-icon">⚙️</div>
             <div class="time-display-mini" id="time-display-mini">Loading...</div>
         </div>
         
-        <!-- Close button for expanded state -->
         <button class="close-btn" id="close-controls">×</button>
         
-        <!-- Expandable content -->
         <div class="controls-content">
             <div class="control-section manual-mode-control">
                 <button class="manual-mode-btn" id="manual-mode-btn">Manual Select</button>
@@ -429,91 +398,17 @@
     </div>
 
     <script>
-        // Function to get saved location or use default
-        function getSavedLocation() {
-            const saved = localStorage.getItem('rainPredictor_location');
-            if (saved) {
-                try {
-                    return JSON.parse(saved);
-                } catch (e) {
-                    console.error('Error parsing saved location:', e);
-                }
-            }
-            
-            // Fallback to body data attributes
-            return {
-                latitude: parseFloat(document.body.dataset.latitude),
-                longitude: parseFloat(document.body.dataset.longitude)
-            };
-        }
+        // In-memory storage for settings (replacing localStorage)
+        let currentSettings = {
+            colorScheme: 2,
+            mapStyle: 'light',
+            zoomLevel: 10
+        };
 
-        // Function to save location permanently
-        function saveLocationToStorage(lat, lng) {
-            localStorage.setItem('rainPredictor_location', JSON.stringify({
-                latitude: lat,
-                longitude: lng
-            }));
-        }
-
-        function saveZoomLevel(zoom) {
-            currentSettings.zoomLevel = zoom;
-            saveSettings(); // Save to persistent storage
-        }
-
-        function getSavedZoomLevel() {
-            return currentSettings.zoomLevel || 10; // Use settings zoom or default to 10
-        }
-
-        // UPDATED: Function to get saved settings or use defaults - NOW INCLUDES ZOOM
-        function getSavedSettings() {
-            const saved = localStorage.getItem('rainPredictor_settings');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    // Ensure zoomLevel exists with a default value
-                    if (!parsed.hasOwnProperty('zoomLevel')) {
-                        parsed.zoomLevel = 10;
-                    }
-                    return parsed;
-                } catch (e) {
-                    console.error('Error parsing saved settings:', e);
-                }
-            }
-            
-            // Default settings - NOW INCLUDES ZOOM LEVEL
-            return {
-                colorScheme: 2,
-                mapStyle: 'light',
-                zoomLevel: 10
-            };
-        }
-
-        // UPDATED: Function to save settings permanently - NOW INCLUDES ZOOM
-        function saveSettings(colorScheme, mapStyle, zoomLevel) {
-            const settings = {
-                colorScheme: colorScheme || currentSettings.colorScheme,
-                mapStyle: mapStyle || currentSettings.mapStyle,
-                zoomLevel: zoomLevel || currentSettings.zoomLevel
-            };
-            localStorage.setItem('rainPredictor_settings', JSON.stringify(settings));
-            // Update currentSettings
-            Object.assign(currentSettings, settings);
-        }
-
-        // Get current location and settings (saved or default)
-        const currentLocation = getSavedLocation();
-        let currentSettings = getSavedSettings(); // CHANGED: Made mutable with let
-        const latitude = currentLocation.latitude;
-        const longitude = currentLocation.longitude;
-
-        // Use the current page's origin and pathname to construct correct API URLs
-        const currentUrl = window.location.href;
-        const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, '');
-
-        // Construct API URLs using the current page's base
-        const apiDataUrl = `${baseUrl}/api/data`;
-        const apiSetLocationUrl = `${baseUrl}/api/set_location`;
-        const apiUpdateConfigUrl = `${baseUrl}/api/update_config`;
+        let currentLocation = {
+            latitude: -27.4698,
+            longitude: 153.0251
+        };
 
         let map;
         let radarLayers = [];
@@ -524,327 +419,210 @@
         let currentColorScheme = currentSettings.colorScheme;
         let baseLayer;
         let locationMarker;
-        
-        // Manual selection mode variables
         let manualMode = false;
-        let isDrawing = false;
-        let selectionRectangle = null;
-        let selectionBounds = null;
-        let drawStartPoint = null;
-        let autoTrackingHighlight = null;
-
-        console.log('Current URL:', currentUrl);
-        console.log('Base URL:', baseUrl);
-        console.log('Using location:', { latitude, longitude });
-        console.log('Using settings:', currentSettings);
-        console.log('API URLs:', { 
-            data: apiDataUrl, 
-            setLocation: apiSetLocationUrl, 
-            updateConfig: apiUpdateConfigUrl 
-        });
-
-        // Control panel functionality
-        function toggleControls() {
-            const controls = document.getElementById('animation-controls');
-            const isCollapsed = controls.classList.contains('collapsed');
-            
-            if (isCollapsed) {
-                controls.classList.remove('collapsed');
-                controls.classList.add('expanded');
-            } else {
-                controls.classList.remove('expanded');
-                controls.classList.add('collapsed');
-            }
-        }
-
-        function collapseControls() {
-            const controls = document.getElementById('animation-controls');
-            controls.classList.remove('expanded');
-            controls.classList.add('collapsed');
-        }
-
-        // BETTER FIX: Map initialization that starts with the correct style
-        function initializeMap() {
-            const savedZoom = getSavedZoomLevel();
-            
-            map = L.map('map', {
-                center: [latitude, longitude],
-                zoom: savedZoom, // Use saved zoom level
-                zoomControl: true,
-                attributionControl: false
-            });
-
-            // FIXED: Create initial base layer with the saved style
-            createBaseLayerForStyle(currentSettings.mapStyle);
-
-            // Add scale control to bottom left corner
-            L.control.scale({
-                position: 'bottomleft',
-                metric: true,
-                imperial: false,
-                maxWidth: 150
-            }).addTo(map);
-
-            // Save zoom level when it changes
-            map.on('zoomend', function() {
-                saveZoomLevel(map.getZoom());
-            });
-
-            const locationIcon = L.divIcon({
-                className: 'location-marker',
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-
-            locationMarker = L.marker([latitude, longitude], { 
-                icon: locationIcon,
-                draggable: true
-            })
-            .addTo(map)
-            .bindPopup('Your Location (Drag to move)')
-            .openPopup();
-
-            locationMarker.on('dragstart', function() {
-                document.getElementById('save-location-btn').style.display = 'block';
-            });
-
-            locationMarker.on('dragend', function() {
-                const newPos = locationMarker.getLatLng();
-                console.log('Marker moved to:', newPos.lat, newPos.lng);
-            });
-
-            loadRadarData();
-        }
+        let selectedRainCell = null;
+        let rainCellHighlight = null;
+        let clickedLocation = null;
 
         // Manual selection mode functions
-        function toggleManualMode() {
-            manualMode = !manualMode;
-            const btn = document.getElementById('manual-mode-btn');
-            const indicator = document.getElementById('mode-indicator');
-            
-            if (manualMode) {
-                btn.textContent = 'Exit Manual';
-                btn.classList.add('active');
-                indicator.classList.add('manual-mode');
-                map.getContainer().style.cursor = 'crosshair';
-                
-                // Enable drawing interactions
-                enableDrawing();
-            } else {
-                btn.textContent = 'Manual Select';
-                btn.classList.remove('active');
-                indicator.classList.remove('manual-mode');
-                map.getContainer().style.cursor = '';
-                
-                // Disable drawing and clear selection
-                disableDrawing();
-                clearSelection();
-            }
+        function enableClickSelection() {
+            map.on('click', handleRainCellClick);
+            // Keep map dragging enabled for better UX
         }
 
-        function enableDrawing() {
-            map.on('mousedown', startDrawing);
-            map.on('mousemove', updateDrawing);
-            map.on('mouseup', finishDrawing);
-            
-            // Disable map dragging while drawing
-            map.dragging.disable();
+        function disableClickSelection() {
+            map.off('click', handleRainCellClick);
         }
 
-        function disableDrawing() {
-            map.off('mousedown', startDrawing);
-            map.off('mousemove', updateDrawing);
-            map.off('mouseup', finishDrawing);
-            
-            // Re-enable map dragging
-            map.dragging.enable();
-        }
-
-        function startDrawing(e) {
+        function handleRainCellClick(e) {
             if (!manualMode) return;
             
-            isDrawing = true;
-            drawStartPoint = e.latlng;
+            // Store clicked location
+            clickedLocation = e.latlng;
             
             // Clear any existing selection
-            clearSelection();
+            clearRainCellSelection();
             
-            // Create initial rectangle
-            selectionRectangle = L.rectangle([drawStartPoint, drawStartPoint], {
-                className: 'selection-rectangle',
-                fillOpacity: 0.2,
-                weight: 2,
-                dashArray: '5,5',
-                color: '#4299e1'
-            }).addTo(map);
-        }
-
-        function updateDrawing(e) {
-            if (!manualMode || !isDrawing || !selectionRectangle) return;
+            // Create a simulated rain cell detection
+            // In a real app, this would analyze radar data at the clicked point
+            const detectedCell = detectRainCellAtPoint(clickedLocation);
             
-            // Update rectangle bounds
-            const bounds = L.latLngBounds(drawStartPoint, e.latlng);
-            selectionRectangle.setBounds(bounds);
-        }
-
-        function finishDrawing(e) {
-            if (!manualMode || !isDrawing) return;
-            
-            isDrawing = false;
-            
-            if (selectionRectangle) {
-                selectionBounds = selectionRectangle.getBounds();
+            if (detectedCell) {
+                selectedRainCell = detectedCell;
+                highlightRainCell(detectedCell);
+                updateTrackingData(detectedCell);
                 
-                // Send selection to backend
-                sendManualSelection(selectionBounds);
-                
-                console.log('Selection completed:', {
-                    north: selectionBounds.getNorth(),
-                    south: selectionBounds.getSouth(),
-                    east: selectionBounds.getEast(),
-                    west: selectionBounds.getWest()
-                });
-            }
-        }
-
-        function clearSelection() {
-            if (selectionRectangle) {
-                map.removeLayer(selectionRectangle);
-                selectionRectangle = null;
-                selectionBounds = null;
-            }
-        }
-
-        // Auto-tracking highlight functions
-        function updateAutoTrackingHighlight(bounds) {
-            // Clear existing highlight
-            clearAutoTrackingHighlight();
-            
-            if (bounds && bounds.north && bounds.south && bounds.east && bounds.west) {
-                const latLngBounds = L.latLngBounds(
-                    [bounds.south, bounds.west],
-                    [bounds.north, bounds.east]
-                );
-                
-                autoTrackingHighlight = L.rectangle(latLngBounds, {
-                    className: 'auto-tracking-highlight',
-                    fillOpacity: 0.15,
-                    weight: 3,
-                    dashArray: '10,5',
-                    color: '#48bb78',
-                    interactive: false // Don't interfere with map interactions
-                }).addTo(map);
-                
-                console.log('Auto-tracking highlight updated:', bounds);
-            }
-        }
-
-        function clearAutoTrackingHighlight() {
-            if (autoTrackingHighlight) {
-                map.removeLayer(autoTrackingHighlight);
-                autoTrackingHighlight = null;
-            }
-        }
-
-        async function sendManualSelection(bounds) {
-            try {
-                const selectionData = {
-                    mode: 'manual',
-                    selection: {
-                        north: bounds.getNorth(),
-                        south: bounds.getSouth(),
-                        east: bounds.getEast(),
-                        west: bounds.getWest()
-                    }
-                };
-
-                console.log('Sending manual selection:', selectionData);
-
-                const response = await fetch(`${baseUrl}/api/manual_selection`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify(selectionData)
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    console.log('Manual selection response:', result);
-                    
-                    // Update display immediately
-                    setTimeout(fetchAndUpdateData, 500);
-                } else {
-                    console.error('Failed to send manual selection:', response.status);
-                }
-            } catch (error) {
-                console.error('Error sending manual selection:', error);
-            }
-        }
-
-        // Function to reset to automatic mode (called from backend or timeout)
-        function resetToAutomaticMode() {
-            if (manualMode) {
-                toggleManualMode();
-            }
-        }
-
-        // Enhanced manual mode toggle that handles auto-tracking highlight
-        function toggleManualModeEnhanced() {
-            manualMode = !manualMode;
-            const btn = document.getElementById('manual-mode-btn');
-            const indicator = document.getElementById('mode-indicator');
-            
-            if (manualMode) {
-                btn.textContent = 'Exit Manual';
-                btn.classList.add('active');
-                indicator.classList.add('manual-mode');
-                map.getContainer().style.cursor = 'crosshair';
-                
-                // Hide auto-tracking highlight in manual mode
-                clearAutoTrackingHighlight();
-                
-                // Enable drawing interactions
-                enableDrawing();
+                console.log('Rain cell selected at:', clickedLocation, 'Cell data:', detectedCell);
             } else {
-                btn.textContent = 'Manual Select';
-                btn.classList.remove('active');
-                indicator.classList.remove('manual-mode');
-                map.getContainer().style.cursor = '';
-                
-                // Disable drawing and clear manual selection
-                disableDrawing();
-                clearSelection();
-                
-                // Re-fetch data to restore auto-tracking highlight
-                setTimeout(fetchAndUpdateData, 500);
+                // Show feedback for clicking on area with no rain
+                showNoRainFeedback(clickedLocation);
             }
         }
 
-        // BETTER FIX: Map initialization that starts with the correct style
-        function initializeMap() {
-            const savedZoom = getSavedZoomLevel();
+        function detectRainCellAtPoint(latlng) {
+            // Simulate rain cell detection - in reality this would analyze radar pixel data
+            // For demo, we'll create a simulated cell with some probability
+            const hasRain = Math.random() > 0.3; // 70% chance of detecting rain
             
-            console.log('Initializing map with:', { latitude, longitude, zoom: savedZoom });
+            if (!hasRain) return null;
             
-            // Ensure we have valid coordinates
-            if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
-                console.error('Invalid coordinates:', { latitude, longitude });
-                return;
+            // Generate simulated rain cell properties
+            const cellSize = 0.02 + Math.random() * 0.05; // Random cell size
+            const intensity = Math.random() * 100; // Rain intensity 0-100
+            
+            return {
+                center: latlng,
+                bounds: L.latLngBounds(
+                    [latlng.lat - cellSize/2, latlng.lng - cellSize/2],
+                    [latlng.lat + cellSize/2, latlng.lng + cellSize/2]
+                ),
+                intensity: intensity,
+                speed: 8 + Math.random() * 25, // 8-33 kph
+                direction: Math.random() * 360, // 0-360 degrees
+                estimatedArea: Math.pow(cellSize * 111, 2) // km²
+            };
+        }
+
+        function highlightRainCell(cell) {
+            // Create pulsing highlight around the selected rain cell
+            rainCellHighlight = L.circle(cell.center, {
+                radius: 3000 + Math.random() * 2000, // 3-5km radius
+                color: '#ff6b6b',
+                fillColor: '#ff6b6b',
+                fillOpacity: 0.1,
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '10,5',
+                className: 'rain-cell-highlight'
+            }).addTo(map);
+            
+            // Add pulsing animation
+            let pulseOpacity = 0.8;
+            let increasing = false;
+            
+            const pulseInterval = setInterval(() => {
+                if (!rainCellHighlight || !map.hasLayer(rainCellHighlight)) {
+                    clearInterval(pulseInterval);
+                    return;
+                }
+                
+                if (increasing) {
+                    pulseOpacity += 0.05;
+                    if (pulseOpacity >= 1) increasing = false;
+                } else {
+                    pulseOpacity -= 0.05;
+                    if (pulseOpacity <= 0.3) increasing = true;
+                }
+                
+                rainCellHighlight.setStyle({ opacity: pulseOpacity });
+            }, 100);
+            
+            // Add center marker
+            const cellMarker = L.circleMarker(cell.center, {
+                radius: 8,
+                color: '#ff6b6b',
+                fillColor: '#ffffff',
+                fillOpacity: 1,
+                weight: 2
+            }).addTo(map);
+            
+            // Store marker reference for cleanup
+            rainCellHighlight._centerMarker = cellMarker;
+        }
+
+        function updateTrackingData(cell) {
+            // Calculate distance from location to rain cell
+            const userLocation = locationMarker.getLatLng();
+            const distance = userLocation.distanceTo(cell.center) / 1000; // Convert to km
+            
+            // Calculate bearing from cell to user location
+            const bearing = calculateBearing(cell.center, userLocation);
+            
+            // Simulate time to arrival based on distance and speed
+            const timeToRain = Math.max(1, Math.round((distance / cell.speed) * 60)); // Convert to minutes
+            
+            // Update mode indicator
+            const indicator = document.getElementById('mode-indicator');
+            indicator.textContent = `Tracking selected rain cell (${cell.estimatedArea.toFixed(1)} km²)`;
+            
+            // Update data panel
+            updateDataDisplay({
+                time_to_rain: timeToRain,
+                distance: distance.toFixed(1),
+                speed: cell.speed.toFixed(1),
+                direction: cell.direction,
+                bearing: bearing,
+                mode: 'manual',
+                cell_intensity: cell.intensity
+            });
+        }
+
+        function calculateBearing(from, to) {
+            const lat1 = from.lat * Math.PI / 180;
+            const lat2 = to.lat * Math.PI / 180;
+            const deltaLng = (to.lng - from.lng) * Math.PI / 180;
+            
+            const x = Math.sin(deltaLng) * Math.cos(lat2);
+            const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+            
+            const bearing = Math.atan2(x, y) * 180 / Math.PI;
+            return (bearing + 360) % 360; // Normalize to 0-360
+        }
+
+        function showNoRainFeedback(latlng) {
+            // Temporary feedback for clicking on areas with no rain
+            const noRainMarker = L.circleMarker(latlng, {
+                radius: 6,
+                color: '#666',
+                fillColor: '#999',
+                fillOpacity: 0.7,
+                weight: 1
+            }).addTo(map);
+            
+            noRainMarker.bindPopup('No rain detected at this location').openPopup();
+            
+            // Remove after 2 seconds
+            setTimeout(() => {
+                map.removeLayer(noRainMarker);
+            }, 2000);
+            
+            // Update mode indicator
+            const indicator = document.getElementById('mode-indicator');
+            indicator.textContent = 'No rain cell found - try clicking on a rain area';
+        }
+
+        function clearRainCellSelection() {
+            if (rainCellHighlight) {
+                if (rainCellHighlight._centerMarker) {
+                    map.removeLayer(rainCellHighlight._centerMarker);
+                }
+                map.removeLayer(rainCellHighlight);
+                rainCellHighlight = null;
             }
+            selectedRainCell = null;
+        }
+
+        // Mock data for demonstration
+        let mockData = {
+            time_to_rain: 15,
+            distance: 5.2,
+            speed: 12.5,
+            direction: 235,
+            bearing: 55
+        };
+
+        function initializeMap() {
+            console.log('Initializing map...');
             
             map = L.map('map', {
-                center: [latitude, longitude],
-                zoom: savedZoom,
+                center: [currentLocation.latitude, currentLocation.longitude],
+                zoom: currentSettings.zoomLevel,
                 zoomControl: true,
                 attributionControl: false
             });
 
-            // FIXED: Create initial base layer with the saved style
             createBaseLayerForStyle(currentSettings.mapStyle);
 
-            // Add scale control to bottom left corner
             L.control.scale({
                 position: 'bottomleft',
                 metric: true,
@@ -852,9 +630,8 @@
                 maxWidth: 150
             }).addTo(map);
 
-            // Save zoom level when it changes
             map.on('zoomend', function() {
-                saveZoomLevel(map.getZoom());
+                currentSettings.zoomLevel = map.getZoom();
             });
 
             const locationIcon = L.divIcon({
@@ -863,12 +640,12 @@
                 iconAnchor: [10, 10]
             });
 
-            locationMarker = L.marker([latitude, longitude], { 
+            locationMarker = L.marker([currentLocation.latitude, currentLocation.longitude], { 
                 icon: locationIcon,
                 draggable: true
             })
             .addTo(map)
-            .bindPopup('Your Location (Drag to move)')
+            .bindPopup('Your Location (Brisbane, AU)<br>Drag to move')
             .openPopup();
 
             locationMarker.on('dragstart', function() {
@@ -877,6 +654,8 @@
 
             locationMarker.on('dragend', function() {
                 const newPos = locationMarker.getLatLng();
+                currentLocation.latitude = newPos.lat;
+                currentLocation.longitude = newPos.lng;
                 console.log('Marker moved to:', newPos.lat, newPos.lng);
             });
 
@@ -919,148 +698,18 @@
                     });
             }
             
-            // Add the base layer to the map
-            baseLayer.addTo(map);
-        }
-
-        // NEW: Separate function to set base layer
-        function setBaseLayer(style) {
-            // Remove current base layer if it exists
-            if (baseLayer && map.hasLayer(baseLayer)) {
-                map.removeLayer(baseLayer);
-            }
-            
-            // Add new base layer based on style
-            switch(style) {
-                case 'light':
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'standard':
-                    baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'satellite':
-                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                        attribution: '© Esri, © OpenStreetMap contributors',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'terrain':
-                    baseLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenTopoMap, © OpenStreetMap contributors',
-                        maxZoom: 20
-                    });
-                    break;
-                default:
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-            }
-            
-            // Add the new base layer to the map
             if (map) {
                 baseLayer.addTo(map);
             }
         }
-        async function saveLocation() {
-            if (!locationMarker) return;
 
-            const newPos = locationMarker.getLatLng();
-            const saveBtn = document.getElementById('save-location-btn');
-            
-            saveBtn.textContent = 'Saving...';
-            saveBtn.disabled = true;
-
-            console.log('Saving location to URL:', apiSetLocationUrl);
-            console.log('Sending data:', { latitude: newPos.lat, longitude: newPos.lng });
-
-            try {
-                // Save to localStorage first for immediate persistence
-                saveLocationToStorage(newPos.lat, newPos.lng);
-                console.log('Location saved to localStorage');
-
-                const response = await fetch(apiSetLocationUrl, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        latitude: newPos.lat,
-                        longitude: newPos.lng
-                    })
-                });
-
-                console.log('Response status:', response.status);
-                console.log('Response headers:', [...response.headers.entries()]);
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.log('Error response text:', errorText);
-                    throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`);
-                }
-
-                const result = await response.json();
-                console.log('Success response:', result);
-
-                if (result.status === 'success') {
-                    // Also update the addon config (optional)
-                    fetch(apiUpdateConfigUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ latitude: newPos.lat, longitude: newPos.lng })
-                    }).catch(err => console.log('Config update failed:', err));
-
-                    saveBtn.textContent = '✓ Saved!';
-                    saveBtn.style.background = '#48bb78';
-                    
-                    setTimeout(() => {
-                        saveBtn.style.display = 'none';
-                        saveBtn.textContent = 'Save Location';
-                        saveBtn.style.background = '#48bb78';
-                        saveBtn.disabled = false;
-                    }, 2000);
-
-                    locationMarker.bindPopup(`Location Updated & Saved<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
-                    setTimeout(fetchAndUpdateData, 1000);
-                } else {
-                    throw new Error(result.message || 'Failed to save location');
-                }
-            } catch (error) {
-                console.error('Detailed error saving location:', error);
-                
-                // Location is still saved locally even if API fails
-                saveBtn.textContent = '✓ Saved Locally';
-                saveBtn.style.background = '#f6ad55'; // Orange for partial success
-                
-                setTimeout(() => {
-                    saveBtn.style.display = 'none';
-                    saveBtn.textContent = 'Save Location';
-                    saveBtn.style.background = '#48bb78';
-                    saveBtn.disabled = false;
-                }, 3000);
-
-                locationMarker.bindPopup(`Location Saved Locally<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}<br><small>(API update failed)</small>`).openPopup();
-            }
-        }
-
-        // UPDATED: Radar data loading with improved layer management
         async function loadRadarData() {
             try {
+                console.log('Loading radar data...');
                 const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
                 const data = await response.json();
                 
-                // Only use past radar data to avoid blank future frames
                 radarData = data.radar.past;
-                
                 console.log(`Loaded ${radarData.length} radar frames`);
                 
                 // Clear existing layers
@@ -1071,23 +720,22 @@
                 });
                 radarLayers = [];
                 
-                // Add ALL radar layers to the map initially (but make them invisible except the first)
+                // Add radar layers
                 radarData.forEach(function(frame, index) {
                     const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${currentColorScheme}/1_1.png`, {
                         tileSize: 256,
-                        opacity: index === 0 ? 0.6 : 0, // Only first layer visible
+                        opacity: index === 0 ? 0.6 : 0,
                         transparent: true,
                         fadeAnimation: false,
                         zoomAnimation: false
                     });
                     
-                    // Add ALL layers to the map immediately
                     radarLayer.addTo(map);
                     radarLayers.push(radarLayer);
                 });
 
                 animationPosition = 0;
-                updateTimeDisplay(); // IMPORTANT: Call this to update time displays
+                updateTimeDisplay();
                 startAnimation();
                 
             } catch (error) {
@@ -1104,22 +752,19 @@
             
             animationTimer = setInterval(function() {
                 if (animating && radarLayers.length > 0) {
-                    // Hide current layer by setting opacity to 0
                     if (radarLayers[animationPosition]) {
                         radarLayers[animationPosition].setOpacity(0);
                     }
                     
-                    // Move to next frame
                     animationPosition = (animationPosition + 1) % radarLayers.length;
                     
-                    // Show next layer by setting opacity to 0.6
                     if (radarLayers[animationPosition]) {
                         radarLayers[animationPosition].setOpacity(0.6);
                     }
                     
-                    updateTimeDisplay(); // Update time displays during animation
+                    updateTimeDisplay();
                 }
-            }, 450); // Good speed - not too fast, not too slow
+            }, 450);
         }
 
         function toggleAnimation() {
@@ -1133,7 +778,6 @@
             }
         }
 
-        // UPDATED: Time display function with better error handling
         function updateTimeDisplay() {
             if (radarData && radarData[animationPosition]) {
                 const time = new Date(radarData[animationPosition].time * 1000);
@@ -1147,19 +791,11 @@
                     timeText = `-${diffMinutes}m`;
                 }
                 
-                // Update both time displays
                 const timeDisplay = document.getElementById('time-display');
                 const timeMini = document.getElementById('time-display-mini');
                 
                 if (timeDisplay) timeDisplay.textContent = timeText;
                 if (timeMini) timeMini.textContent = timeText;
-            } else {
-                // Fallback if no radar data
-                const timeDisplay = document.getElementById('time-display');
-                const timeMini = document.getElementById('time-display-mini');
-                
-                if (timeDisplay) timeDisplay.textContent = 'Loading...';
-                if (timeMini) timeMini.textContent = 'Loading...';
             }
         }
 
@@ -1167,18 +803,17 @@
             if (!map || radarLayers.length === 0) return;
             
             currentColorScheme = colorScheme;
+            currentSettings.colorScheme = colorScheme;
             
-            // Remove all current radar layers
             radarLayers.forEach(function(layer) {
                 map.removeLayer(layer);
             });
             radarLayers = [];
             
-            // Recreate all layers with new color scheme
             radarData.forEach(function(frame, index) {
                 const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`, {
                     tileSize: 256,
-                    opacity: index === animationPosition ? 0.6 : 0, // Only current frame visible
+                    opacity: index === animationPosition ? 0.6 : 0,
                     transparent: true,
                     fadeAnimation: false,
                     zoomAnimation: false
@@ -1187,79 +822,32 @@
                 radarLayer.addTo(map);
                 radarLayers.push(radarLayer);
             });
-
-            // FIXED: Save to settings using your original function signature
-            saveSettings(colorScheme, currentSettings.mapStyle, currentSettings.zoomLevel);
         }
 
         function changeMapStyle(style) {
             if (!map) return;
             
-            // Store current radar state before changing base layer
             const currentRadarOpacities = radarLayers.map(layer => layer.options.opacity);
             const wasAnimating = animating;
             
-            // Remove current base layer
             if (baseLayer) {
                 map.removeLayer(baseLayer);
             }
             
-            // Add new base layer based on style
-            switch(style) {
-                case 'light':
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'standard':
-                    baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'satellite':
-                    baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                        attribution: '© Esri, © OpenStreetMap contributors',
-                        maxZoom: 20
-                    });
-                    break;
-                case 'terrain':
-                    baseLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenTopoMap, © OpenStreetMap contributors',
-                        maxZoom: 20
-                    });
-                    break;
-                default:
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '© OpenStreetMap contributors, © CARTO',
-                        subdomains: 'abcd',
-                        maxZoom: 20
-                    });
-            }
+            createBaseLayerForStyle(style);
+            currentSettings.mapStyle = style;
             
-            // Add the new base layer
-            baseLayer.addTo(map);
-            
-            // Ensure radar layers are still on top and maintain their opacity
             radarLayers.forEach((layer, index) => {
                 if (map.hasLayer(layer)) {
-                    // Remove and re-add to ensure proper layering
                     map.removeLayer(layer);
                     layer.addTo(map);
-                    // Restore the opacity
                     layer.setOpacity(currentRadarOpacities[index] || 0);
                 }
             });
             
-            // Restore animation state
             if (wasAnimating) {
                 startAnimation();
             }
-            
-            // Save to settings (UPDATED to use your original saveSettings structure)
-            saveSettings(currentSettings.colorScheme, style, currentSettings.zoomLevel);
         }
 
         function degreesToCardinal(degrees) {
@@ -1298,266 +886,154 @@
             return `N (${Math.round(normalizedDegrees)}°)`;
         }
 
-        // FIXED: Updated data display function with better validation and NOW handling
         function updateDataDisplay(data) {
-            console.log('API Response:', data);
-            
-            // Handle auto-tracking highlight (only in automatic mode)
-            if (!manualMode && data && data.tracking_bounds) {
-                updateAutoTrackingHighlight(data.tracking_bounds);
-            } else if (manualMode) {
-                // Clear auto-tracking highlight in manual mode
-                clearAutoTrackingHighlight();
-            }
-            
-            // Update mode indicator if data includes mode info
-            if (data && data.mode) {
-                const indicator = document.getElementById('mode-indicator');
-                if (data.mode === 'manual' && data.selection) {
-                    indicator.textContent = `Tracking selected area (${Math.round(data.selection.area || 0)} km²)`;
-                } else if (data.mode === 'automatic') {
-                    indicator.textContent = 'Automatic mode - tracking nearest rain';
-                }
-            }
-            
-            // Helper function to check if a value is valid/trackable
-            function isValidValue(value) {
-                if (value === null || value === undefined || value === '' || value === '--' || value === 'N/A' || value === 'null') {
-                    return false;
-                }
-                
-                // Handle string values that might represent numbers
-                if (typeof value === 'string') {
-                    const trimmed = value.trim().toLowerCase();
-                    if (trimmed === '' || trimmed === 'n/a' || trimmed === 'null' || trimmed === '--') {
-                        return false;
-                    }
-                }
-                
-                const numValue = parseFloat(value);
-                if (isNaN(numValue)) {
-                    return false;
-                }
-                
-                // These values typically indicate no tracking/no data
-                if (numValue === -1 || numValue === -1.0 || numValue === 999 || numValue === 999.0) {
-                    return false;
-                }
-                
-                return true;
-            }
-
-            // FIXED: Handle time to rain with special "NOW" case
-            let timeText = '--';
             const timeElement = document.getElementById('time-to-rain');
+            const modeText = data.mode === 'manual' ? '(Manual)' : '(Auto)';
             
-            if (data && data.time_to_rain !== undefined && data.time_to_rain !== null) {
-                console.log('time_to_rain raw value:', data.time_to_rain, 'type:', typeof data.time_to_rain);
-                
-                // Handle special cases for "now" or immediate rain
-                if (typeof data.time_to_rain === 'string') {
-                    const lowerValue = data.time_to_rain.toLowerCase().trim();
-                    if (lowerValue === 'now' || lowerValue === '0' || lowerValue === 'immediate') {
-                        timeText = 'NOW';
-                        timeElement.classList.add('now');
-                    } else if (isValidValue(data.time_to_rain)) {
-                        const timeValue = parseFloat(data.time_to_rain);
-                        if (timeValue <= 0) {
-                            timeText = 'NOW';
-                            timeElement.classList.add('now');
-                        } else {
-                            timeText = `${Math.round(timeValue)} min`;
-                            timeElement.classList.remove('now');
-                        }
-                    }
-                } else if (typeof data.time_to_rain === 'number') {
-                    if (data.time_to_rain <= 0) {
-                        timeText = 'NOW';
-                        timeElement.classList.add('now');
-                    } else if (data.time_to_rain > 0 && data.time_to_rain < 999) {
-                        timeText = `${Math.round(data.time_to_rain)} min`;
-                        timeElement.classList.remove('now');
-                    }
-                }
-            }
-            
-            if (timeText === '--') {
+            // Handle time to rain
+            if (data.time_to_rain <= 0) {
+                timeElement.innerText = 'NOW';
+                timeElement.classList.add('now');
+            } else {
+                timeElement.innerText = data.time_to_rain ? `${data.time_to_rain} min` : '--';
                 timeElement.classList.remove('now');
             }
             
-            timeElement.innerText = timeText;
-
-            // Handle distance
-            let distanceText = '--';
-            console.log('distance value:', data?.distance, 'type:', typeof data?.distance, 'isValid:', data ? isValidValue(data.distance) : false);
-            if (data && isValidValue(data.distance)) {
-                const distValue = parseFloat(data.distance);
-                if (distValue > 0) {
-                    distanceText = `${Math.round(distValue * 10) / 10} km`;
-                }
-            }
-            document.getElementById('distance').innerText = distanceText;
-
-            // FIXED: Handle speed with better validation
-            let speedText = '--';
-            console.log('speed value:', data?.speed, 'type:', typeof data?.speed, 'isValid:', data ? isValidValue(data.speed) : false);
-            if (data && isValidValue(data.speed)) {
-                const speedValue = parseFloat(data.speed);
-                // Accept any positive speed value, including very small ones
-                if (speedValue > 0) {
-                    speedText = `${Math.round(speedValue * 10) / 10} kph`;
-                }
-            }
-            document.getElementById('speed').innerText = speedText;
-
-            // FIXED: Handle direction with better validation for angles
-            let directionText = '--';
-            console.log('direction value:', data?.direction, 'type:', typeof data?.direction, 'isValid:', data ? isValidValue(data.direction) : false);
-            if (data && data.direction !== undefined && data.direction !== null) {
-                const dirValue = parseFloat(data.direction);
-                // Valid directions are 0-360 degrees (including 0)
-                if (!isNaN(dirValue) && dirValue >= 0 && dirValue <= 360) {
-                    directionText = degreesToCardinal(dirValue);
-                }
-            }
-            document.getElementById('direction').innerText = directionText;
-
-            // FIXED: Handle bearing with better validation for angles
-            let bearingText = '--';
-            console.log('bearing value:', data?.bearing, 'type:', typeof data?.bearing, 'isValid:', data ? isValidValue(data.bearing) : false);
-            if (data && data.bearing !== undefined && data.bearing !== null) {
-                const bearValue = parseFloat(data.bearing);
-                // Valid bearings are 0-360 degrees (including 0)
-                if (!isNaN(bearValue) && bearValue >= 0 && bearValue <= 360) {
-                    bearingText = degreesToCardinal(bearValue);
-                }
-            }
-            document.getElementById('bearing').innerText = bearingText;
-        }
-
-        async function fetchAndUpdateData() {
-            try {
-                console.log('Fetching data from:', apiDataUrl);
-                const response = await fetch(apiDataUrl);
-                if (!response.ok) {
-                    console.error(`API request failed with status: ${response.status}`);
-                    return; 
-                }
-                const data = await response.json();
-                updateDataDisplay(data);
-            } catch (error) {
-                console.error('Error fetching or parsing prediction data:', error);
+            document.getElementById('distance').innerText = data.distance ? `${data.distance} km` : '--';
+            document.getElementById('speed').innerText = data.speed ? `${data.speed} kph` : '--';
+            document.getElementById('direction').innerText = data.direction ? degreesToCardinal(data.direction) : '--';
+            document.getElementById('bearing').innerText = data.bearing ? degreesToCardinal(data.bearing) : '--';
+            
+            // Update data panel labels to show mode
+            const labels = document.querySelectorAll('.data-label');
+            if (labels.length > 0 && data.mode) {
+                labels[0].textContent = `TIME TO RAIN ${modeText}`;
             }
         }
 
+        function saveLocation() {
+            if (!locationMarker) return;
+
+            const newPos = locationMarker.getLatLng();
+            const saveBtn = document.getElementById('save-location-btn');
+            
+            saveBtn.textContent = 'Saved!';
+            saveBtn.style.background = '#48bb78';
+            
+            currentLocation.latitude = newPos.lat;
+            currentLocation.longitude = newPos.lng;
+            
+            setTimeout(() => {
+                saveBtn.style.display = 'none';
+                saveBtn.textContent = 'Save Location';
+            }, 2000);
+
+            locationMarker.bindPopup(`Location Updated<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
+        }
+
+        function toggleControls() {
+            const controls = document.getElementById('animation-controls');
+            const isCollapsed = controls.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                controls.classList.remove('collapsed');
+                controls.classList.add('expanded');
+            } else {
+                controls.classList.remove('expanded');
+                controls.classList.add('collapsed');
+            }
+        }
+
+        function collapseControls() {
+            const controls = document.getElementById('animation-controls');
+            controls.classList.remove('expanded');
+            controls.classList.add('collapsed');
+        }
+
+        function toggleManualMode() {
+            manualMode = !manualMode;
+            const btn = document.getElementById('manual-mode-btn');
+            const indicator = document.getElementById('mode-indicator');
+            
+            if (manualMode) {
+                btn.textContent = 'Exit Manual';
+                btn.classList.add('active');
+                indicator.classList.add('manual-mode');
+                indicator.style.display = 'block';
+                indicator.textContent = 'Click on a rain cell to track it';
+                map.getContainer().style.cursor = 'pointer';
+                
+                // Enable click selection
+                enableClickSelection();
+            } else {
+                btn.textContent = 'Manual Select';
+                btn.classList.remove('active');
+                indicator.classList.remove('manual-mode');
+                indicator.style.display = 'none';
+                map.getContainer().style.cursor = '';
+                
+                // Disable click selection and clear any selected cell
+                disableClickSelection();
+                clearRainCellSelection();
+                
+                // Return to automatic mode data
+                updateDataDisplay({
+                    ...mockData,
+                    mode: 'automatic'
+                });
+            }
+        }
+
+        // Initialize everything when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initializeMap();
-            fetchAndUpdateData();
-            setInterval(fetchAndUpdateData, 5000);
+            updateDataDisplay({...mockData, mode: 'automatic'});
             
-            setTimeout(function() {
-                // Control panel toggle functionality
-                const controlsPanel = document.getElementById('animation-controls');
-                const controlsHeader = controlsPanel.querySelector('.controls-header');
-                const closeBtn = document.getElementById('close-controls');
-                
-                // Click on collapsed panel to expand
-                controlsHeader.addEventListener('click', function(e) {
-                    if (controlsPanel.classList.contains('collapsed')) {
-                        e.stopPropagation();
-                        toggleControls();
-                    }
-                });
-                
-                // Click close button to collapse
-                closeBtn.addEventListener('click', function(e) {
+            // Control panel event listeners
+            const controlsPanel = document.getElementById('animation-controls');
+            const controlsHeader = controlsPanel.querySelector('.controls-header');
+            const closeBtn = document.getElementById('close-controls');
+            
+            controlsHeader.addEventListener('click', function(e) {
+                if (controlsPanel.classList.contains('collapsed')) {
                     e.stopPropagation();
+                    toggleControls();
+                }
+            });
+            
+            closeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                collapseControls();
+            });
+            
+            const controlsContent = controlsPanel.querySelector('.controls-content');
+            controlsContent.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+            
+            document.addEventListener('click', function(e) {
+                if (!controlsPanel.contains(e.target) && controlsPanel.classList.contains('expanded')) {
                     collapseControls();
-                });
-                
-                // Prevent collapse when clicking inside expanded content
-                const controlsContent = controlsPanel.querySelector('.controls-content');
-                controlsContent.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                });
-                
-                // Click outside to collapse (optional)
-                document.addEventListener('click', function(e) {
-                    if (!controlsPanel.contains(e.target) && controlsPanel.classList.contains('expanded')) {
-                        collapseControls();
-                    }
-                });
+                }
+            });
 
-                // Play/pause button
-                const playPauseBtn = document.getElementById('play-pause-btn');
-                if (playPauseBtn) {
-                    playPauseBtn.addEventListener('click', toggleAnimation);
-                }
-                
-                // FIXED: Color scheme dropdown with better value setting
-                const colorSchemeSelect = document.getElementById('color-scheme');
-                if (colorSchemeSelect) {
-                    // Ensure the value is a string to match option values
-                    const savedColorScheme = String(currentSettings.colorScheme);
-                    
-                    // Set saved value with a small delay to ensure dropdown is ready
-                    setTimeout(() => {
-                        colorSchemeSelect.value = savedColorScheme;
-                        
-                        // Force a visual update if needed
-                        if (colorSchemeSelect.value !== savedColorScheme) {
-                            // Fallback: find and select the option manually
-                            const options = colorSchemeSelect.options;
-                            for (let i = 0; i < options.length; i++) {
-                                if (options[i].value === savedColorScheme) {
-                                    colorSchemeSelect.selectedIndex = i;
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        console.log('Color scheme set to:', colorSchemeSelect.value, 'from saved:', savedColorScheme);
-                    }, 100);
-                    
-                    colorSchemeSelect.addEventListener('change', function() {
-                        changeColorScheme(parseInt(this.value));
-                    });
-                }
+            // Button event listeners
+            document.getElementById('play-pause-btn').addEventListener('click', toggleAnimation);
+            document.getElementById('save-location-btn').addEventListener('click', saveLocation);
+            document.getElementById('manual-mode-btn').addEventListener('click', toggleManualMode);
 
-                // UPDATED: Map style dropdown with settings integration
-                const mapStyleSelect = document.getElementById('map-style');
-                if (mapStyleSelect) {
-                    // Set saved value from settings
-                    mapStyleSelect.value = currentSettings.mapStyle;
-                    
-                    mapStyleSelect.addEventListener('change', function() {
-                        changeMapStyle(this.value);
-                    });
-                }
+            // Dropdown event listeners
+            const colorSchemeSelect = document.getElementById('color-scheme');
+            colorSchemeSelect.value = String(currentSettings.colorScheme);
+            colorSchemeSelect.addEventListener('change', function() {
+                changeColorScheme(parseInt(this.value));
+            });
 
-                // Save location button
-                const saveLocationBtn = document.getElementById('save-location-btn');
-                if (saveLocationBtn) {
-                    saveLocationBtn.addEventListener('click', saveLocation);
-                }
-
-                // Manual mode button
-                const manualModeBtn = document.getElementById('manual-mode-btn');
-                if (manualModeBtn) {
-                    manualModeBtn.addEventListener('click', toggleManualModeEnhanced);
-                }
-                
-            }, 1000);
-            
-            setInterval(function() {
-                radarLayers.forEach(function(layer) {
-                    if (map.hasLayer(layer)) {
-                        map.removeLayer(layer);
-                    }
-                });
-                radarLayers = [];
-                loadRadarData();
-            }, 600000);
+            const mapStyleSelect = document.getElementById('map-style');
+            mapStyleSelect.value = currentSettings.mapStyle;
+            mapStyleSelect.addEventListener('change', function() {
+                changeMapStyle(this.value);
+            });
         });
     </script>
 </body>
