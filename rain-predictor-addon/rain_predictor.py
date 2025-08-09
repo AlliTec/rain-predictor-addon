@@ -634,10 +634,6 @@ class RainPredictor:
         if hasattr(self, 'thread'):
             self.thread.join(timeout=5)
 
-# Flask Web Application
-app = Flask(__name__)
-CORS(app)
-
 # Global references
 config = None
 ha_api = None
