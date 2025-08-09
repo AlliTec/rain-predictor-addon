@@ -307,24 +307,24 @@
             background: rgba(229, 62, 62, 0.9);
         }
 
-        /* Rain cell highlight animation */
-        .rain-cell-highlight {
-            animation: rain-cell-pulse 2s ease-in-out infinite;
+        .rain-cell-highlight-manual {
+            animation: rain-cell-pulse-manual 2s ease-in-out infinite;
         }
 
-        @keyframes rain-cell-pulse {
-            0% { 
-                stroke-opacity: 0.8;
-                fill-opacity: 0.1;
-            }
-            50% { 
-                stroke-opacity: 1;
-                fill-opacity: 0.2;
-            }
-            100% { 
-                stroke-opacity: 0.8;
-                fill-opacity: 0.1;
-            }
+        .rain-cell-highlight-auto {
+            animation: rain-cell-pulse-auto 2s ease-in-out infinite;
+        }
+
+        @keyframes rain-cell-pulse-manual {
+            0% { fill-opacity: 0.1; stroke-opacity: 0.8; }
+            50% { fill-opacity: 0.2; stroke-opacity: 1; }
+            100% { fill-opacity: 0.1; stroke-opacity: 0.8; }
+        }
+
+        @keyframes rain-cell-pulse-auto {
+            0% { fill-opacity: 0.1; stroke-opacity: 0.8; }
+            50% { fill-opacity: 0.2; stroke-opacity: 1; }
+            100% { fill-opacity: 0.1; stroke-opacity: 0.8; }
         }
 
         .data-value.now {
@@ -406,8 +406,8 @@
         };
 
         let currentLocation = {
-            latitude: -27.4698,
-            longitude: 153.0251
+            latitude: parseFloat(document.body.dataset.latitude) || -27.4698,
+            longitude: parseFloat(document.body.dataset.longitude) || 153.0251
         };
 
         let map;
@@ -420,17 +420,16 @@
         let baseLayer;
         let locationMarker;
         let manualMode = false;
-        let selectedRainCell = null;
         let rainCellHighlight = null;
-        let clickedLocation = null;
         let autoTrackingHighlight = null;
-        let trackingAnimationTimer = null;
+        let lastAnimationTime = Date.now();
+        let trackedCell = null; // Real data from API
 
-        // Animation and tracking variables
-        let cellTrackingData = {
-            manual: null,
-            automatic: null
-        };
+        // API URLs
+        const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, '');
+        const apiDataUrl = `${baseUrl}/api/data`;
+        const apiSetLocationUrl = `${baseUrl}/api/set_location`;
+        const apiManualSelectionUrl = `${baseUrl}/api/manual_selection`;
 
         function formatTimeToRain(minutes) {
             if (minutes <= 0) return 'NOW';
@@ -449,368 +448,8 @@
                 return `${hours}h ${remainingMinutes}m`;
             }
         }
-        // Manual selection mode functions
-        function enableClickSelection() {
-            map.on('click', handleRainCellClick);
-            // Keep map dragging enabled for better UX
-        }
-
-        function disableClickSelection() {
-            map.off('click', handleRainCellClick);
-        }
-
-        function handleRainCellClick(e) {
-            if (!manualMode) return;
-            
-            // Store clicked location
-            clickedLocation = e.latlng;
-            
-            // Clear any existing selection
-            clearRainCellSelection();
-            
-            // Create a simulated rain cell detection
-            // In a real app, this would analyze radar data at the clicked point
-            const detectedCell = detectRainCellAtPoint(clickedLocation);
-            
-            if (detectedCell) {
-                selectedRainCell = detectedCell;
-                cellTrackingData.manual = detectedCell;
-                highlightRainCell(detectedCell, 'manual');
-                updateTrackingData(detectedCell);
-                startCellTracking();
-                
-                console.log('Rain cell selected at:', clickedLocation, 'Cell data:', detectedCell);
-            } else {
-                // Show feedback for clicking on area with no rain
-                showNoRainFeedback(clickedLocation);
-            }
-        }
-
-        function detectRainCellAtPoint(latlng) {
-            // Simulate rain cell detection - in reality this would analyze radar pixel data
-            // For demo, we'll create a simulated cell with some probability
-            const hasRain = Math.random() > 0.3; // 70% chance of detecting rain
-            
-            if (!hasRain) return null;
-            
-            // Generate simulated rain cell properties
-            const cellSize = 0.02 + Math.random() * 0.05; // Random cell size
-            const intensity = Math.random() * 100; // Rain intensity 0-100
-            const speed = 8 + Math.random() * 25; // 8-33 kph
-            const direction = Math.random() * 360; // 0-360 degrees
-            
-            return {
-                center: latlng,
-                bounds: L.latLngBounds(
-                    [latlng.lat - cellSize/2, latlng.lng - cellSize/2],
-                    [latlng.lat + cellSize/2, latlng.lng + cellSize/2]
-                ),
-                intensity: intensity,
-                speed: speed,
-                direction: direction,
-                estimatedArea: Math.pow(cellSize * 111, 2), // km²
-                lastUpdate: Date.now()
-            };
-        }
-
-        function highlightRainCell(cell, mode = 'manual') {
-            const isManual = mode === 'manual';
-            const color = isManual ? '#ff6b6b' : '#48bb78';
-            const radius = 3000 + Math.random() * 2000; // 3-5km radius
-            
-            // Create the appropriate highlight variable
-            const highlight = L.circle(cell.center, {
-                radius: radius,
-                color: color,
-                fillColor: color,
-                fillOpacity: 0.1,
-                weight: 3,
-                opacity: 0.8,
-                dashArray: '10,5',
-                className: isManual ? 'rain-cell-highlight' : 'auto-tracking-highlight'
-            }).addTo(map);
-            
-            // Add movement arrow showing direction
-            const arrow = createMovementArrow(cell.center, cell.direction, cell.speed, color);
-            arrow.addTo(map);
-            
-            // Add center marker
-            const cellMarker = L.circleMarker(cell.center, {
-                radius: 8,
-                color: color,
-                fillColor: '#ffffff',
-                fillOpacity: 1,
-                weight: 2
-            }).addTo(map);
-            
-            // Store references for cleanup
-            highlight._centerMarker = cellMarker;
-            highlight._arrow = arrow;
-            highlight._mode = mode;
-            
-            // Store in appropriate variable
-            if (isManual) {
-                rainCellHighlight = highlight;
-            } else {
-                autoTrackingHighlight = highlight;
-            }
-            
-            return highlight;
-        }
-
-        function createMovementArrow(center, direction, speed, color) {
-            // Calculate arrow end point based on direction and speed
-            const arrowLength = Math.min(0.01, speed / 1000); // Scale arrow by speed
-            const directionRad = (direction - 90) * Math.PI / 180; // Convert to radians, adjust for map orientation
-            
-            const endLat = center.lat + Math.cos(directionRad) * arrowLength;
-            const endLng = center.lng + Math.sin(directionRad) * arrowLength;
-            
-            // Create arrow polyline
-            const arrow = L.polyline([
-                [center.lat, center.lng],
-                [endLat, endLng]
-            ], {
-                color: color,
-                weight: 4,
-                opacity: 0.9
-            });
-            
-            // Add arrowhead
-            const arrowHead = L.circleMarker([endLat, endLng], {
-                radius: 6,
-                color: color,
-                fillColor: color,
-                fillOpacity: 1,
-                weight: 2
-            });
-            
-            // Group arrow parts
-            const arrowGroup = L.layerGroup([arrow, arrowHead]);
-            arrow._arrowHead = arrowHead;
-            
-            return arrowGroup;
-        }
-
-        function startCellTracking() {
-            // Clear existing tracking animation
-            if (trackingAnimationTimer) {
-                clearInterval(trackingAnimationTimer);
-            }
-            
-            // Start dynamic tracking animation
-            trackingAnimationTimer = setInterval(() => {
-                updateCellPositions();
-            }, 2000); // Update every 2 seconds
-        }
-
-        function updateCellPositions() {
-            const now = Date.now();
-            
-            // Update manual tracking cell
-            if (cellTrackingData.manual && rainCellHighlight) {
-                const cell = cellTrackingData.manual;
-                const timeDiff = (now - cell.lastUpdate) / 1000; // seconds
-                
-                // Calculate new position based on speed and direction
-                const newPosition = calculateNewCellPosition(cell.center, cell.direction, cell.speed, timeDiff);
-                
-                // Update cell data
-                cell.center = newPosition;
-                cell.lastUpdate = now;
-                
-                // Update visual elements
-                updateHighlightPosition(rainCellHighlight, newPosition, cell);
-                
-                // Recalculate tracking data
-                updateTrackingData(cell);
-            }
-            
-            // Update automatic tracking cell
-            if (cellTrackingData.automatic && autoTrackingHighlight) {
-                const cell = cellTrackingData.automatic;
-                const timeDiff = (now - cell.lastUpdate) / 1000; // seconds
-                
-                const newPosition = calculateNewCellPosition(cell.center, cell.direction, cell.speed, timeDiff);
-                
-                cell.center = newPosition;
-                cell.lastUpdate = now;
-                
-                updateHighlightPosition(autoTrackingHighlight, newPosition, cell);
-                
-                // Update automatic tracking data if not in manual mode
-                if (!manualMode) {
-                    updateTrackingData(cell);
-                }
-            }
-        }
-
-        function calculateNewCellPosition(currentPos, direction, speedKph, timeSeconds) {
-            // Convert speed from kph to degrees per second (rough approximation)
-            const speedDegPerSec = (speedKph / 3600) / 111; // 1 degree ≈ 111 km
-            const distance = speedDegPerSec * timeSeconds;
-            
-            // Convert direction to radians and adjust for map orientation
-            const directionRad = (direction - 90) * Math.PI / 180;
-            
-            const newLat = currentPos.lat + Math.cos(directionRad) * distance;
-            const newLng = currentPos.lng + Math.sin(directionRad) * distance;
-            
-            return L.latLng(newLat, newLng);
-        }
-
-        function updateHighlightPosition(highlight, newPosition, cell) {
-            if (!highlight || !map.hasLayer(highlight)) return;
-            
-            // Update circle position
-            highlight.setLatLng(newPosition);
-            
-            // Update center marker
-            if (highlight._centerMarker) {
-                highlight._centerMarker.setLatLng(newPosition);
-            }
-            
-            // Update arrow
-            if (highlight._arrow) {
-                map.removeLayer(highlight._arrow);
-                const color = highlight._mode === 'manual' ? '#ff6b6b' : '#48bb78';
-                highlight._arrow = createMovementArrow(newPosition, cell.direction, cell.speed, color);
-                highlight._arrow.addTo(map);
-            }
-        }
-
-        function updateTrackingData(cell) {
-            // Calculate distance from location to rain cell
-            const userLocation = locationMarker.getLatLng();
-            const distance = userLocation.distanceTo(cell.center) / 1000; // Convert to km
-            
-            // Calculate bearing from cell to user location
-            const bearing = calculateBearing(cell.center, userLocation);
-            
-            // Simulate time to arrival based on distance and speed
-            const timeToRainMinutes = Math.max(1, (distance / cell.speed) * 60); // Convert to minutes
-            
-            // Update mode indicator
-            const indicator = document.getElementById('mode-indicator');
-            if (manualMode) {
-                indicator.textContent = `Tracking selected rain cell (${cell.estimatedArea.toFixed(1)} km²)`;
-            } else {
-                indicator.textContent = `Auto-tracking nearest rain cell (${cell.estimatedArea.toFixed(1)} km²)`;
-            }
-            
-            // Update data panel with formatted time
-            updateDataDisplay({
-                time_to_rain: timeToRainMinutes,
-                distance: distance.toFixed(1),
-                speed: cell.speed.toFixed(1),
-                direction: cell.direction,
-                bearing: bearing,
-                mode: manualMode ? 'manual' : 'automatic',
-                cell_intensity: cell.intensity
-            });
-        }
-
-        // Initialize automatic tracking for demo
-        function initializeAutomaticTracking() {
-            if (!manualMode && !autoTrackingHighlight) {
-                // Create a simulated automatic rain cell
-                const userLocation = locationMarker.getLatLng();
-                
-                // Place automatic cell at a random nearby location
-                const offsetLat = (Math.random() - 0.5) * 0.1; // ±0.05 degrees
-                const offsetLng = (Math.random() - 0.5) * 0.1;
-                
-                const autoCell = {
-                    center: L.latLng(userLocation.lat + offsetLat, userLocation.lng + offsetLng),
-                    intensity: 50 + Math.random() * 50,
-                    speed: 15 + Math.random() * 15,
-                    direction: Math.random() * 360,
-                    estimatedArea: 5 + Math.random() * 15,
-                    lastUpdate: Date.now()
-                };
-                
-                cellTrackingData.automatic = autoCell;
-                highlightRainCell(autoCell, 'automatic');
-                updateTrackingData(autoCell);
-                startCellTracking();
-            }
-        }
-
-        function calculateBearing(from, to) {
-            const lat1 = from.lat * Math.PI / 180;
-            const lat2 = to.lat * Math.PI / 180;
-            const deltaLng = (to.lng - from.lng) * Math.PI / 180;
-            
-            const x = Math.sin(deltaLng) * Math.cos(lat2);
-            const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
-            
-            const bearing = Math.atan2(x, y) * 180 / Math.PI;
-            return (bearing + 360) % 360; // Normalize to 0-360
-        }
-
-        function showNoRainFeedback(latlng) {
-            // Temporary feedback for clicking on areas with no rain
-            const noRainMarker = L.circleMarker(latlng, {
-                radius: 6,
-                color: '#666',
-                fillColor: '#999',
-                fillOpacity: 0.7,
-                weight: 1
-            }).addTo(map);
-            
-            noRainMarker.bindPopup('No rain detected at this location').openPopup();
-            
-            // Remove after 2 seconds
-            setTimeout(() => {
-                map.removeLayer(noRainMarker);
-            }, 2000);
-            
-            // Update mode indicator
-            const indicator = document.getElementById('mode-indicator');
-            indicator.textContent = 'No rain cell found - try clicking on a rain area';
-        }
-
-        function clearRainCellSelection() {
-            if (rainCellHighlight) {
-                if (rainCellHighlight._centerMarker) {
-                    map.removeLayer(rainCellHighlight._centerMarker);
-                }
-                if (rainCellHighlight._arrow) {
-                    map.removeLayer(rainCellHighlight._arrow);
-                }
-                map.removeLayer(rainCellHighlight);
-                rainCellHighlight = null;
-            }
-            selectedRainCell = null;
-            cellTrackingData.manual = null;
-        }
-
-        function clearAutoTrackingHighlight() {
-            if (autoTrackingHighlight) {
-                if (autoTrackingHighlight._centerMarker) {
-                    map.removeLayer(autoTrackingHighlight._centerMarker);
-                }
-                if (autoTrackingHighlight._arrow) {
-                    map.removeLayer(autoTrackingHighlight._arrow);
-                }
-                map.removeLayer(autoTrackingHighlight);
-                autoTrackingHighlight = null;
-            }
-            cellTrackingData.automatic = null;
-        }
-
-        // Mock data for demonstration
-        let mockData = {
-            time_to_rain: 15,
-            distance: 5.2,
-            speed: 12.5,
-            direction: 235,
-            bearing: 55
-        };
 
         function initializeMap() {
-            console.log('Initializing map...');
-            
             map = L.map('map', {
                 center: [currentLocation.latitude, currentLocation.longitude],
                 zoom: currentSettings.zoomLevel,
@@ -842,7 +481,7 @@
                 draggable: true
             })
             .addTo(map)
-            .bindPopup('Your Location (Brisbane, AU)<br>Drag to move')
+            .bindPopup('Your Location (Drag to move)')
             .openPopup();
 
             locationMarker.on('dragstart', function() {
@@ -856,7 +495,6 @@
                 console.log('Marker moved to:', newPos.lat, newPos.lng);
             });
 
-            console.log('Map initialized successfully');
             loadRadarData();
         }
 
@@ -895,14 +533,11 @@
                     });
             }
             
-            if (map) {
-                baseLayer.addTo(map);
-            }
+            baseLayer.addTo(map);
         }
 
         async function loadRadarData() {
             try {
-                console.log('Loading radar data...');
                 const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
                 const data = await response.json();
                 
@@ -917,7 +552,6 @@
                 });
                 radarLayers = [];
                 
-                // Add radar layers
                 radarData.forEach(function(frame, index) {
                     const radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/${currentColorScheme}/1_1.png`, {
                         tileSize: 256,
@@ -949,15 +583,11 @@
             
             animationTimer = setInterval(function() {
                 if (animating && radarLayers.length > 0) {
-                    if (radarLayers[animationPosition]) {
-                        radarLayers[animationPosition].setOpacity(0);
-                    }
+                    radarLayers[animationPosition].setOpacity(0);
                     
                     animationPosition = (animationPosition + 1) % radarLayers.length;
                     
-                    if (radarLayers[animationPosition]) {
-                        radarLayers[animationPosition].setOpacity(0.6);
-                    }
+                    radarLayers[animationPosition].setOpacity(0.6);
                     
                     updateTimeDisplay();
                 }
@@ -981,12 +611,7 @@
                 const now = new Date();
                 const diffMinutes = Math.round((now - time) / 60000);
                 
-                let timeText;
-                if (diffMinutes === 0) {
-                    timeText = 'Now';
-                } else {
-                    timeText = `-${diffMinutes}m`;
-                }
+                let timeText = diffMinutes === 0 ? 'Now' : `-${diffMinutes}m`;
                 
                 const timeDisplay = document.getElementById('time-display');
                 const timeMini = document.getElementById('time-display-mini');
@@ -1083,70 +708,181 @@
             return `N (${Math.round(normalizedDegrees)}°)`;
         }
 
-        function updateDataDisplay(data) {
-            const timeElement = document.getElementById('time-to-rain');
-            const modeText = data.mode === 'manual' ? '(Manual)' : '(Auto)';
-            
-            // Handle time to rain with improved formatting
-            const formattedTime = formatTimeToRain(data.time_to_rain || 0);
-            
-            if (formattedTime === 'NOW') {
-                timeElement.innerText = 'NOW';
-                timeElement.classList.add('now');
-            } else {
-                timeElement.innerText = formattedTime;
-                timeElement.classList.remove('now');
+        function animate() {
+            const now = Date.now();
+            const deltaTime = (now - lastAnimationTime) / 1000;
+            lastAnimationTime = now;
+
+            if (animating && radarLayers.length > 0) {
+                radarLayers[animationPosition].setOpacity(0);
+                animationPosition = (animationPosition + 1) % radarLayers.length;
+                radarLayers[animationPosition].setOpacity(0.6);
+                updateTimeDisplay();
             }
-            
-            document.getElementById('distance').innerText = data.distance ? `${data.distance} km` : '--';
-            document.getElementById('speed').innerText = data.speed ? `${data.speed} kph` : '--';
-            document.getElementById('direction').innerText = data.direction ? degreesToCardinal(data.direction) : '--';
-            document.getElementById('bearing').innerText = data.bearing ? degreesToCardinal(data.bearing) : '--';
-            
-            // Update data panel labels to show mode
-            const labels = document.querySelectorAll('.data-label');
-            if (labels.length > 0 && data.mode) {
-                labels[0].textContent = `TIME TO RAIN ${modeText}`;
+
+            if (trackedCell && trackedCell.center && trackedCell.speed && trackedCell.direction) {
+                updateCellPosition(trackedCell, manualMode ? rainCellHighlight : autoTrackingHighlight, deltaTime, manualMode ? 'manual' : 'automatic');
+                updateTrackingData(trackedCell);
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function updateCellPosition(cell, highlight, deltaTime, mode) {
+            if (!cell || !highlight) return;
+
+            const speedDegPerSec = (cell.speed / 3600) / 111;
+            const distance = speedDegPerSec * deltaTime;
+            const directionRad = (cell.direction - 90) * Math.PI / 180;
+            const newLat = cell.center.lat + Math.cos(directionRad) * distance;
+            const newLng = cell.center.lng + Math.sin(directionRad) * distance;
+            cell.center = L.latLng(newLat, newLng);
+
+            highlight.setLatLng(cell.center);
+        }
+
+        function highlightRainCell(cell, mode) {
+            const isManual = mode === 'manual';
+            const color = isManual ? '#ff6b6b' : '#48bb78';
+            const radius = 3000; // Fixed for simplicity, adjust based on data if available
+
+            clearRainCellSelection();
+            clearAutoTrackingHighlight();
+
+            const highlight = L.circle(cell.center, {
+                radius: radius,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.1,
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '10,5',
+                className: isManual ? 'rain-cell-highlight-manual' : 'rain-cell-highlight-auto'
+            }).addTo(map);
+
+            const arrow = createMovementArrow(cell.center, cell.direction, cell.speed, color);
+            arrow.addTo(map);
+
+            const cellMarker = L.circleMarker(cell.center, {
+                radius: 8,
+                color: color,
+                fillColor: '#ffffff',
+                fillOpacity: 1,
+                weight: 2
+            }).addTo(map);
+
+            highlight._centerMarker = cellMarker;
+            highlight._arrow = arrow;
+            highlight._mode = mode;
+
+            if (isManual) {
+                rainCellHighlight = highlight;
+            } else {
+                autoTrackingHighlight = highlight;
             }
         }
 
-        function saveLocation() {
-            if (!locationMarker) return;
+        function createMovementArrow(center, direction, speed, color) {
+            const arrowLength = Math.min(0.01, speed / 1000);
+            const directionRad = (direction - 90) * Math.PI / 180;
+            
+            const endLat = center.lat + Math.cos(directionRad) * arrowLength;
+            const endLng = center.lng + Math.sin(directionRad) * arrowLength;
+            
+            const arrow = L.polyline([
+                [center.lat, center.lng],
+                [endLat, endLng]
+            ], {
+                color: color,
+                weight: 4,
+                opacity: 0.9
+            });
+            
+            const arrowHead = L.circleMarker([endLat, endLng], {
+                radius: 6,
+                color: color,
+                fillColor: color,
+                fillOpacity: 1,
+                weight: 2
+            });
+            
+            const arrowGroup = L.layerGroup([arrow, arrowHead]);
+            arrowGroup._arrowHead = arrowHead;
+            
+            return arrowGroup;
+        }
 
-            const newPos = locationMarker.getLatLng();
-            const saveBtn = document.getElementById('save-location-btn');
+        function clearRainCellSelection() {
+            if (rainCellHighlight) {
+                map.removeLayer(rainCellHighlight._centerMarker);
+                map.removeLayer(rainCellHighlight._arrow);
+                map.removeLayer(rainCellHighlight);
+                rainCellHighlight = null;
+            }
+        }
+
+        function clearAutoTrackingHighlight() {
+            if (autoTrackingHighlight) {
+                map.removeLayer(autoTrackingHighlight._centerMarker);
+                map.removeLayer(autoTrackingHighlight._arrow);
+                map.removeLayer(autoTrackingHighlight);
+                autoTrackingHighlight = null;
+            }
+        }
+
+        function updateTrackingData(cell) {
+            const userLocation = locationMarker.getLatLng();
+            const distance = userLocation.distanceTo(cell.center) / 1000;
+            const bearing = calculateBearing(userLocation, cell.center);
+            const timeToRainMinutes = Math.max(1, (distance / cell.speed) * 60);
             
-            saveBtn.textContent = 'Saved!';
-            saveBtn.style.background = '#48bb78';
+            updateDataDisplay({
+                time_to_rain: timeToRainMinutes,
+                distance: distance.toFixed(1),
+                speed: cell.speed.toFixed(1),
+                direction: cell.direction,
+                bearing: bearing
+            });
+        }
+
+        function calculateBearing(from, to) {
+            const lat1 = from.lat * Math.PI / 180;
+            const lat2 = to.lat * Math.PI / 180;
+            const deltaLng = (to.lng - from.lng) * Math.PI / 180;
             
-            currentLocation.latitude = newPos.lat;
-            currentLocation.longitude = newPos.lng;
+            const x = Math.sin(deltaLng) * Math.cos(lat2);
+            const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+            
+            const bearing = Math.atan2(x, y) * 180 / Math.PI;
+            return (bearing + 360) % 360;
+        }
+
+        function showNoRainFeedback(latlng) {
+            const noRainMarker = L.circleMarker(latlng, {
+                radius: 6,
+                color: '#666',
+                fillColor: '#999',
+                fillOpacity: 0.7,
+                weight: 1
+            }).addTo(map);
+            
+            noRainMarker.bindPopup('No rain detected at this location').openPopup();
             
             setTimeout(() => {
-                saveBtn.style.display = 'none';
-                saveBtn.textContent = 'Save Location';
+                map.removeLayer(noRainMarker);
             }, 2000);
-
-            locationMarker.bindPopup(`Location Updated<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
         }
 
         function toggleControls() {
             const controls = document.getElementById('animation-controls');
-            const isCollapsed = controls.classList.contains('collapsed');
-            
-            if (isCollapsed) {
-                controls.classList.remove('collapsed');
-                controls.classList.add('expanded');
-            } else {
-                controls.classList.remove('expanded');
-                controls.classList.add('collapsed');
-            }
+            controls.classList.toggle('collapsed');
+            controls.classList.toggle('expanded');
         }
 
         function collapseControls() {
             const controls = document.getElementById('animation-controls');
-            controls.classList.remove('expanded');
             controls.classList.add('collapsed');
+            controls.classList.remove('expanded');
         }
 
         function toggleManualMode() {
@@ -1162,12 +898,10 @@
                 indicator.textContent = 'Click on a rain cell to track it';
                 map.getContainer().style.cursor = 'pointer';
                 
-                // Hide automatic tracking when in manual mode
                 if (autoTrackingHighlight) {
                     autoTrackingHighlight.setStyle({ opacity: 0.3, fillOpacity: 0.05 });
                 }
                 
-                // Enable click selection
                 enableClickSelection();
             } else {
                 btn.textContent = 'Manual Select';
@@ -1176,36 +910,134 @@
                 indicator.style.display = 'none';
                 map.getContainer().style.cursor = '';
                 
-                // Show automatic tracking again
                 if (autoTrackingHighlight) {
                     autoTrackingHighlight.setStyle({ opacity: 0.8, fillOpacity: 0.1 });
                 }
                 
-                // Disable click selection and clear any selected cell
                 disableClickSelection();
                 clearRainCellSelection();
                 
-                // Return to automatic mode data or initialize if needed
-                if (cellTrackingData.automatic) {
-                    updateTrackingData(cellTrackingData.automatic);
-                } else {
-                    // Initialize automatic tracking
-                    setTimeout(initializeAutomaticTracking, 1000);
-                }
+                fetchAndUpdateData();
             }
         }
 
-        // Initialize everything when page loads
+        function enableClickSelection() {
+            map.on('click', handleRainCellClick);
+        }
+
+        function disableClickSelection() {
+            map.off('click', handleRainCellClick);
+        }
+
+        async function handleRainCellClick(e) {
+            if (!manualMode) return;
+            
+            try {
+                const response = await fetch(apiManualSelectionUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitude: e.latlng.lat, longitude: e.latlng.lng })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    trackedCell = data;
+                    highlightRainCell(data, 'manual');
+                    updateTrackingData(data);
+                } else {
+                    showNoRainFeedback(e.latlng);
+                }
+            } catch (error) {
+                console.error('Error selecting rain cell:', error);
+            }
+        }
+
+        async function saveLocation() {
+            if (!locationMarker) return;
+
+            const newPos = locationMarker.getLatLng();
+            const saveBtn = document.getElementById('save-location-btn');
+            
+            saveBtn.textContent = 'Saving...';
+            saveBtn.disabled = true;
+
+            try {
+                const response = await fetch(apiSetLocationUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitude: newPos.lat, longitude: newPos.lng })
+                });
+
+                if (response.ok) {
+                    saveBtn.textContent = 'Saved!';
+                    saveBtn.style.background = '#48bb78';
+                    
+                    setTimeout(() => {
+                        saveBtn.style.display = 'none';
+                        saveBtn.textContent = 'Save Location';
+                        saveBtn.style.background = '#48bb78';
+                        saveBtn.disabled = false;
+                    }, 2000);
+
+                    locationMarker.bindPopup(`Location Updated<br>Lat: ${newPos.lat.toFixed(6)}<br>Lng: ${newPos.lng.toFixed(6)}`).openPopup();
+                    fetchAndUpdateData();
+                } else {
+                    throw new Error('Failed to save location');
+                }
+            } catch (error) {
+                console.error('Error saving location:', error);
+                saveBtn.textContent = 'Error';
+                saveBtn.disabled = false;
+            }
+        }
+
+        function updateDataDisplay(data) {
+            const timeElement = document.getElementById('time-to-rain');
+            let formattedTime = '--';
+            if (data && data.time_to_rain !== undefined) {
+                formattedTime = formatTimeToRain(parseFloat(data.time_to_rain));
+                timeElement.classList.toggle('now', formattedTime === 'NOW');
+            } else {
+                timeElement.classList.remove('now');
+            }
+            timeElement.innerText = formattedTime;
+
+            document.getElementById('distance').innerText = data && data.distance ? `${data.distance} km` : '--';
+            document.getElementById('speed').innerText = data && data.speed ? `${data.speed} kph` : '--';
+            document.getElementById('direction').innerText = data && data.direction ? degreesToCardinal(data.direction) : '--';
+            document.getElementById('bearing').innerText = data && data.bearing ? degreesToCardinal(data.bearing) : '--';
+
+            if (data && data.center && data.speed && data.direction) {
+                trackedCell = data;
+                highlightRainCell(data, manualMode ? 'manual' : 'automatic');
+            } else {
+                clearRainCellSelection();
+                clearAutoTrackingHighlight();
+            }
+        }
+
+        async function fetchAndUpdateData() {
+            try {
+                const response = await fetch(apiDataUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    updateDataDisplay(data);
+                } else {
+                    console.error(`API request failed: ${response.status}`);
+                    updateDataDisplay(null);
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                updateDataDisplay(null);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             initializeMap();
-            updateDataDisplay({...mockData, mode: 'automatic'});
+            fetchAndUpdateData();
+            setInterval(fetchAndUpdateData, 5000);
+            requestAnimationFrame(animate);
             
-            // Initialize automatic tracking after map loads
-            setTimeout(() => {
-                initializeAutomaticTracking();
-            }, 2000);
-            
-            // Control panel event listeners
             const controlsPanel = document.getElementById('animation-controls');
             const controlsHeader = controlsPanel.querySelector('.controls-header');
             const closeBtn = document.getElementById('close-controls');
@@ -1228,28 +1060,20 @@
             });
             
             document.addEventListener('click', function(e) {
-                if (!controlsPanel.contains(e.target) && controlsPanel.classList.contains('expanded')) {
+                if (!controlsPanel.contains(e.target) && !controlsPanel.classList.contains('collapsed')) {
                     collapseControls();
                 }
             });
 
-            // Button event listeners
             document.getElementById('play-pause-btn').addEventListener('click', toggleAnimation);
-            document.getElementById('save-location-btn').addEventListener('click', saveLocation);
-            document.getElementById('manual-mode-btn').addEventListener('click', toggleManualMode);
-
-            // Dropdown event listeners
-            const colorSchemeSelect = document.getElementById('color-scheme');
-            colorSchemeSelect.value = String(currentSettings.colorScheme);
-            colorSchemeSelect.addEventListener('change', function() {
+            document.getElementById('color-scheme').addEventListener('change', function() {
                 changeColorScheme(parseInt(this.value));
             });
-
-            const mapStyleSelect = document.getElementById('map-style');
-            mapStyleSelect.value = currentSettings.mapStyle;
-            mapStyleSelect.addEventListener('change', function() {
+            document.getElementById('map-style').addEventListener('change', function() {
                 changeMapStyle(this.value);
             });
+            document.getElementById('save-location-btn').addEventListener('click', saveLocation);
+            document.getElementById('manual-mode-btn').addEventListener('click', toggleManualMode);
         });
     </script>
 </body>

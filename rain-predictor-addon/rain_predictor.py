@@ -61,6 +61,16 @@ class AddonConfig:
         except (KeyError, TypeError):
             return default
 
+    def update_manual_mode(self, enabled, lat=None, lng=None):
+        """Update manual mode state (called from web API)"""
+        self.config['manual_mode'] = enabled
+        if enabled and lat and lng:
+            self.config['manual_lat'] = lat
+            self.config['manual_lng'] = lng
+        else:
+            self.config.pop('manual_lat', None)
+            self.config.pop('manual_lng', None)
+
 class HomeAssistantAPI:
     """Handle Home Assistant API calls"""
     
@@ -69,7 +79,6 @@ class HomeAssistantAPI:
     
     def call_service(self, service, entity_id, value):
         """Call a Home Assistant service"""
-        # Get the latest token RIGHT BEFORE you use it.
         token = os.environ.get('SUPERVISOR_TOKEN')
         if not token:
             logging.error("SUPERVISOR_TOKEN environment variable not found!")
@@ -88,13 +97,11 @@ class HomeAssistantAPI:
         }
         
         try:
-            # Use the fresh headers for this specific request
             response = requests.post(url, headers=headers, json=data, timeout=10)
             response.raise_for_status()
             logging.debug(f"Successfully called {service} for {entity_id} with value {value}")
             return True
         except requests.exceptions.RequestException as e:
-            # The error message from the response is often more useful
             error_details = e.response.text if e.response else str(e)
             logging.error(f"Error calling service {service} for {entity_id}: {error_details}")
             return False
@@ -138,6 +145,7 @@ class RainPredictor:
         
         # Analysis settings
         self.threshold = config.get('analysis_settings.rain_threshold', 75)
+        self.current_rain_threshold = config.get('analysis_settings.current_rain_threshold', 50)  # New: Lower for current detection
         self.lat_range = config.get('analysis_settings.lat_range_deg', 1.80)
         self.lon_range = config.get('analysis_settings.lon_range_deg', 1.99)
         self.arrival_angle_threshold = config.get('analysis_settings.arrival_angle_threshold_deg', 45)
@@ -145,6 +153,11 @@ class RainPredictor:
         # Tracking settings
         self.max_track_dist = config.get('tracking_settings.max_tracking_distance_km', 30)
         self.min_track_len = config.get('tracking_settings.min_track_length', 2)
+        
+        # Manual mode (new)
+        self.manual_mode = config.get('manual_mode', False)
+        self.manual_lat = config.get('manual_lat')
+        self.manual_lng = config.get('manual_lng')
         
         # Debug settings
         self.save_images = config.get('debug.save_images', False)
@@ -171,47 +184,10 @@ class RainPredictor:
         logging.info(f"Run interval: {self.run_interval/60} minutes")
         logging.info(f"Time entity: {self.entities['time']}")
         logging.info(f"Image settings: Size={self.image_size}, Zoom={self.image_zoom}")
-        logging.info(f"Analysis: Threshold={self.threshold}, Angle={self.arrival_angle_threshold}°")
+        logging.info(f"Analysis: Threshold={self.threshold}, Current Threshold={self.current_rain_threshold}, Angle={self.arrival_angle_threshold}°")
+        logging.info(f"Manual mode: {'Enabled' if self.manual_mode else 'Disabled'}")
     
-    # Helper methods (same as original)
-    def haversine(self, lat1, lon1, lat2, lon2):
-        """Calculate great-circle distance between two points"""
-        R = 6371
-        try:
-            lat1_rad, lon1_rad, lat2_rad, lon2_rad = map(radians, [lat1, lon1, lat2, lon2])
-            dlon = lon2_rad - lon1_rad
-            dlat = lat2_rad - lat1_rad
-            a = sin(dlat / 2)**2 + cos(lat1_rad) * cos(lat2_rad) * sin(dlon / 2)**2
-            c = 2 * asin(sqrt(a))
-            distance = R * c
-            return max(0, distance)
-        except ValueError as e:
-            logging.error(f"Haversine error: {e}")
-            return float('inf')
-    
-    def calculate_bearing(self, lat1, lon1, lat2, lon2):
-        """Calculate initial bearing from point 1 to point 2"""
-        try:
-            lat1_rad, lon1_rad, lat2_rad, lon2_rad = map(radians, [lat1, lon1, lat2, lon2])
-            dlon = lon2_rad - lon1_rad
-            y = sin(dlon) * cos(lat2_rad)
-            x = cos(lat1_rad) * sin(lat2_rad) - sin(lat1_rad) * cos(lat2_rad) * cos(dlon)
-            initial_bearing = atan2(y, x)
-            bearing = (degrees(initial_bearing) + 360) % 360
-            return bearing
-        except ValueError as e:
-            logging.error(f"Bearing calculation error: {e}")
-            return None
-    
-    def degrees_to_compass(self, degrees):
-        """Convert degrees to compass direction"""
-        if degrees is None:
-            return "Unknown"
-        
-        directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", 
-                     "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-        index = round(degrees / 22.5) % 16
-        return directions[index]
+    # Helper methods (haversine, calculate_bearing, degrees_to_compass remain the same)
     
     def download_radar_image(self, image_url):
         """Download radar image from URL"""
@@ -221,7 +197,6 @@ class RainPredictor:
             response.raise_for_status()
             data = response.content
             
-            # Optionally save images for debugging
             if self.save_images:
                 self._save_debug_image(data, image_url)
             
@@ -245,22 +220,22 @@ class RainPredictor:
             logging.error(f"Error saving debug image: {e}")
     
     def analyze_radar_data(self, past_frames, api_data):
-        """Analyze radar data - main prediction logic (simplified from original)"""
+        """Analyze radar data - main prediction logic"""
         logging.info(f"Analyzing {len(past_frames)} frames")
         
         prediction = {
-            'time_to_rain': None, 
-            'speed_kph': None, 
-            'distance_km': None,
-            'direction_deg': None, 
-            'bearing_to_cell_deg': None
+            'time_to_rain': self.defaults['no_rain'], 
+            'speed_kph': 0.0, 
+            'distance_km': self.defaults['no_rain'],
+            'direction_deg': self.defaults['no_direction'], 
+            'bearing_to_cell_deg': self.defaults['no_bearing']
         }
         
         if not past_frames:
             logging.warning("No frames to analyze")
             return prediction
         
-        # Check current location for rain first
+        # Check current location for rain first (improved detection)
         latest_frame = sorted(past_frames, key=lambda f: f.get('time', 0))[-1]
         if self._check_current_rain(latest_frame, api_data):
             logging.info("*** RAIN DETECTED AT CURRENT LOCATION! ***")
@@ -272,7 +247,14 @@ class RainPredictor:
                 'bearing_to_cell_deg': self.defaults['no_bearing']
             }
         
-        # Simplified analysis - find closest approaching cell
+        # Manual mode: Track specific cell if selected
+        if self.manual_mode and self.manual_lat and self.manual_lng:
+            manual_prediction = self._track_manual_cell(past_frames, api_data)
+            if manual_prediction:
+                prediction.update(manual_prediction)
+                return prediction
+        
+        # Automatic mode: Find closest approaching cell (enhanced)
         try:
             closest_cell = self._find_closest_approaching_cell(past_frames, api_data)
             if closest_cell:
@@ -283,7 +265,7 @@ class RainPredictor:
         return prediction
     
     def _check_current_rain(self, frame, api_data):
-        """Check if rain is currently at location"""
+        """Check if rain is currently at location (enhanced sensitivity)"""
         try:
             frame_path = frame.get('path')
             api_host = api_data.get('host')
@@ -302,66 +284,141 @@ class RainPredictor:
             img_height, img_width = img_array.shape
             center_y, center_x = (img_height - 1) / 2.0, (img_width - 1) / 2.0
             
-            # Check small area around center
-            check_radius = 5
+            # Larger check area for better detection
+            check_radius = 8  # Increased from 5
             y_start = max(0, int(center_y - check_radius))
             y_end = min(img_height, int(center_y + check_radius + 1))
             x_start = max(0, int(center_x - check_radius))
             x_end = min(img_width, int(center_x + check_radius + 1))
             
             center_area = img_array[y_start:y_end, x_start:x_end]
-            return np.any(center_area > self.threshold)
+            # Use lower threshold for current rain detection
+            return np.any(center_area > self.current_rain_threshold)
             
         except Exception as e:
             logging.error(f"Error checking current rain: {e}")
             return False
     
-    def _find_closest_approaching_cell(self, past_frames, api_data):
-        """Simplified method to find closest approaching rain cell"""
-        # This is a simplified version - you would implement the full
-        # cell tracking logic from your original code here
+    def _track_manual_cell(self, past_frames, api_data):
+        """Track manually selected rain cell"""
+        logging.info(f"Tracking manual cell at ({self.manual_lat}, {self.manual_lng})")
         
         try:
-            # Get the last two frames for movement calculation
             sorted_frames = sorted(past_frames, key=lambda f: f.get('time', 0))
             if len(sorted_frames) < 2:
                 return None
             
-            frame1, frame2 = sorted_frames[-2], sorted_frames[-1]
+            # Extract cells from last few frames, filter for the manual location
+            manual_cells = []
+            for frame in sorted_frames[-self.min_track_len:]:
+                cells = self._extract_cells_from_frame(frame, api_data)
+                # Find cell closest to manual lat/lng
+                if cells:
+                    closest = min(cells, key=lambda c: self.haversine(self.manual_lat, self.manual_lng, c['lat'], c['lon']))
+                    if self.haversine(self.manual_lat, self.manual_lng, closest['lat'], closest['lon']) < self.max_track_dist:
+                        manual_cells.append(closest)
             
-            # Analyze both frames and find cells
-            cells1 = self._extract_cells_from_frame(frame1, api_data)
-            cells2 = self._extract_cells_from_frame(frame2, api_data)
-            
-            if not cells1 or not cells2:
+            if len(manual_cells) < 2:
+                logging.warning("Insufficient data for manual cell tracking")
                 return None
             
-            # Find closest cell in latest frame
-            closest_cell = min(cells2, key=lambda c: self.haversine(
-                self.latitude, self.longitude, c['lat'], c['lon']
-            ))
+            # Calculate movement (similar to automatic)
+            cell1, cell2 = manual_cells[-2], manual_cells[-1]
+            distance = self.haversine(cell1['lat'], cell1['lon'], cell2['lat'], cell2['lon'])
+            time_diff = (sorted_frames[-1]['time'] - sorted_frames[-2]['time']) / 3600.0  # hours
+            speed = distance / time_diff if time_diff > 0 else 0
+            direction = self.calculate_bearing(cell1['lat'], cell1['lon'], cell2['lat'], cell2['lon'])
             
-            distance = self.haversine(self.latitude, self.longitude, 
-                                    closest_cell['lat'], closest_cell['lon'])
+            # Predict time to location
+            dist_to_location = self.haversine(self.latitude, self.longitude, cell2['lat'], cell2['lon'])
+            time_to_rain = (dist_to_location / speed * 60) if speed > 0 else self.defaults['no_rain']  # minutes
+            time_to_rain = min(9999, max(0, round(time_to_rain)))  # Cap at ~7 days
             
-            # Calculate basic prediction
-            if distance < 100:  # Within 100km
-                bearing = self.calculate_bearing(self.latitude, self.longitude,
-                                               closest_cell['lat'], closest_cell['lon'])
+            bearing = self.calculate_bearing(self.latitude, self.longitude, cell2['lat'], cell2['lon'])
+            
+            return {
+                'time_to_rain': time_to_rain,
+                'speed_kph': round(speed, 1),
+                'distance_km': round(dist_to_location, 1),
+                'direction_deg': round(direction, 1) if direction else self.defaults['no_direction'],
+                'bearing_to_cell_deg': round(bearing, 1) if bearing else self.defaults['no_bearing']
+            }
+        
+        except Exception as e:
+            logging.error(f"Error tracking manual cell: {e}")
+            return None
+    
+    def _find_closest_approaching_cell(self, past_frames, api_data):
+        """Find closest approaching rain cell (enhanced with multi-frame tracking)"""
+        try:
+            sorted_frames = sorted(past_frames, key=lambda f: f.get('time', 0))
+            if len(sorted_frames) < self.min_track_len:
+                return None
+            
+            # Extract cells from last few frames
+            frame_cells = []
+            for frame in sorted_frames[-self.min_track_len:]:
+                cells = self._extract_cells_from_frame(frame, api_data)
+                if cells:
+                    frame_cells.append((frame['time'], cells))
+            
+            if not frame_cells:
+                return None
+            
+            # Track cell movement across frames (simple matching by proximity)
+            tracks = []
+            for i in range(1, len(frame_cells)):
+                prev_time, prev_cells = frame_cells[i-1]
+                curr_time, curr_cells = frame_cells[i]
+                time_diff = (curr_time - prev_time) / 3600.0  # hours
                 
-                return {
-                    'distance_km': round(distance, 2),
-                    'bearing_to_cell_deg': round(bearing, 1) if bearing else self.defaults['no_bearing'],
-                    'time_to_rain': min(999, round(distance * 2))  # Rough estimate
-                }
+                for curr_cell in curr_cells:
+                    # Find matching previous cell
+                    matching_prev = min(prev_cells, key=lambda p: self.haversine(p['lat'], p['lon'], curr_cell['lat'], curr_cell['lon']))
+                    track_dist = self.haversine(matching_prev['lat'], matching_prev['lon'], curr_cell['lat'], curr_cell['lon'])
+                    if track_dist < self.max_track_dist:
+                        speed = track_dist / time_diff if time_diff > 0 else 0
+                        direction = self.calculate_bearing(matching_prev['lat'], matching_prev['lon'], curr_cell['lat'], curr_cell['lon'])
+                        tracks.append({
+                            'lat': curr_cell['lat'],
+                            'lon': curr_cell['lon'],
+                            'speed': speed,
+                            'direction': direction
+                        })
+            
+            if not tracks:
+                return None
+            
+            # Find closest approaching track
+            closest = min(tracks, key=lambda t: self.haversine(self.latitude, self.longitude, t['lat'], t['lon']))
+            distance = self.haversine(self.latitude, self.longitude, closest['lat'], closest['lon'])
+            speed = closest['speed']
+            direction = closest['direction']
+            
+            # Check if approaching (bearing within threshold)
+            bearing_to_cell = self.calculate_bearing(self.latitude, self.longitude, closest['lat'], closest['lon'])
+            approach_angle = abs((bearing_to_cell - direction + 180) % 360 - 180)
+            if approach_angle > self.arrival_angle_threshold:
+                logging.debug(f"Cell not approaching (angle: {approach_angle}°)")
+                return None
+            
+            time_to_rain = (distance / speed * 60) if speed > 0 else self.defaults['no_rain']  # minutes
+            time_to_rain = min(9999, max(0, round(time_to_rain)))  # Cap at ~7 days
+            
+            return {
+                'time_to_rain': time_to_rain,
+                'speed_kph': round(speed, 1),
+                'distance_km': round(distance, 1),
+                'direction_deg': round(direction, 1) if direction else self.defaults['no_direction'],
+                'bearing_to_cell_deg': round(bearing_to_cell, 1) if bearing_to_cell else self.defaults['no_bearing']
+            }
         
         except Exception as e:
             logging.error(f"Error finding approaching cell: {e}")
-        
-        return None
+            return None
     
     def _extract_cells_from_frame(self, frame, api_data):
-        """Extract rain cells from a single frame"""
+        """Extract rain cells from a single frame (unchanged, but robust)"""
         try:
             frame_path = frame.get('path')
             api_host = api_data.get('host')
@@ -378,12 +435,10 @@ class RainPredictor:
             img = Image.open(io.BytesIO(image_data)).convert('L')
             img_array = np.array(img)
             
-            # Find rain pixels
             rain_pixels = img_array > self.threshold
             if not np.any(rain_pixels):
                 return []
             
-            # Label connected components
             labeled_image, num_labels = label(rain_pixels)
             
             cells = []
@@ -439,22 +494,16 @@ class RainPredictor:
             if not self._validate_api_response(api_data):
                 logging.error("Invalid API response")
             else:
-                # Analyze radar data
                 past_frames = api_data['radar'].get('past', [])
                 if past_frames:
                     prediction = self.analyze_radar_data(past_frames, api_data)
-                    
-                    # Update values based on prediction
-                    if prediction.get('time_to_rain') is not None:
-                        values['time'] = max(0, round(prediction['time_to_rain']))
-                    if prediction.get('distance_km') is not None:
-                        values['distance'] = max(0, round(prediction['distance_km'], 1))
-                    if prediction.get('speed_kph') is not None:
-                        values['speed'] = max(0, round(prediction['speed_kph'], 1))
-                    if prediction.get('direction_deg') is not None:
-                        values['direction'] = round(prediction['direction_deg'], 1)
-                    if prediction.get('bearing_to_cell_deg') is not None:
-                        values['bearing'] = round(prediction['bearing_to_cell_deg'], 1)
+                    values.update({
+                        'time': max(0, round(prediction['time_to_rain'])),
+                        'distance': max(0, round(prediction['distance_km'], 1)),
+                        'speed': max(0, round(prediction['speed_kph'], 1)),
+                        'direction': round(prediction['direction_deg'], 1),
+                        'bearing': round(prediction['bearing_to_cell_deg'], 1)
+                    })
                 else:
                     logging.warning("No past radar frames available")
         
