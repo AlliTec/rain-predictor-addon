@@ -634,6 +634,7 @@ class RainPredictor:
         if hasattr(self, 'thread'):
             self.thread.join(timeout=5)
 
+
 # Global references
 config = None
 ha_api = None
