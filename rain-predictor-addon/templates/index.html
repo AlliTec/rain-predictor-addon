@@ -339,15 +339,6 @@
             animation: pulse-ring 2s ease-out infinite;
         }
 
-        .tracker-arrow {
-            width: 0;
-            height: 0;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-bottom: 20px solid;
-            transform-origin: center bottom;
-        }
-
         .data-value.now {
             color: #ff6b6b !important;
             animation: pulse 2s infinite;
@@ -510,12 +501,30 @@
             localStorage.setItem('rainPredictor_settings', JSON.stringify(currentSettings));
         }
 
+        // Load saved location from localStorage
+        function loadSavedLocation() {
+            const saved = localStorage.getItem('rainPredictor_location');
+            if (saved) {
+                try {
+                    const location = JSON.parse(saved);
+                    if (location.latitude && location.longitude) {
+                        return location;
+                    }
+                } catch (e) {
+                    console.error('Error loading saved location:', e);
+                }
+            }
+            return null;
+        }
+
         // Load saved settings
         let currentSettings = getSavedSettings();
 
+        // Initialize location from template or saved location
+        let savedLocation = loadSavedLocation();
         let currentLocation = {
-            latitude: parseFloat(document.body.dataset.latitude) || -27.4698,
-            longitude: parseFloat(document.body.dataset.longitude) || 153.0251
+            latitude: savedLocation ? savedLocation.latitude : (parseFloat(document.body.dataset.latitude) || -27.4698),
+            longitude: savedLocation ? savedLocation.longitude : (parseFloat(document.body.dataset.longitude) || 153.0251)
         };
 
         let map;
@@ -544,9 +553,10 @@
         let radarAnimationSpeed = Math.round(1000 / currentSettings.animationSpeedLevel);
 
         // API URLs
-        const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, '');
+        const baseUrl = window.location.origin;
         const apiDataUrl = `${baseUrl}/api/data`;
         const apiSetLocationUrl = `${baseUrl}/api/set_location`;
+        const apiUpdateConfigUrl = `${baseUrl}/api/update_config`;
         const apiManualSelectionUrl = `${baseUrl}/api/manual_selection`;
 
         function formatTimeToRain(minutes) {
@@ -794,11 +804,6 @@
                 if (trackerMarkers[trackerKey + 'Pulse']) {
                     trackerMarkers[trackerKey + 'Pulse'].setLatLng([lat, lng]);
                 }
-                
-                // Update arrow if exists
-                if (trackerMarkers[trackerKey + 'Arrow']) {
-                    updateTrackerArrow(trackerMarkers[trackerKey + 'Arrow'], lat, lng, cellData[mode]);
-                }
             } else {
                 // Create new tracker
                 createTracker(lat, lng, mode);
@@ -837,14 +842,6 @@
             
             trackerMarkers[trackerKey + 'Pulse'] = pulseCircle;
             
-            // Add direction arrow
-            if (cellData[mode]) {
-                const arrow = createTrackerArrow(lat, lng, cellData[mode]);
-                if (arrow) {
-                    trackerMarkers[trackerKey + 'Arrow'] = arrow;
-                }
-            }
-            
             // Add label
             trackerMarkers[trackerKey].bindTooltip(mode === 'manual' ? 'Manual Track' : 'Auto Track', {
                 permanent: false,
@@ -853,40 +850,10 @@
             });
         }
 
-        function createTrackerArrow(lat, lng, cellInfo) {
-            if (!cellInfo || !cellInfo.direction) return null;
-            
-            const arrowLength = 0.01; // Length of arrow in degrees
-            const directionRad = (cellInfo.direction - 90) * Math.PI / 180;
-            
-            const endLat = lat + Math.cos(directionRad) * arrowLength;
-            const endLng = lng + Math.sin(directionRad) * arrowLength;
-            
-            const arrow = L.polyline([[lat, lng], [endLat, endLng]], {
-                color: '#ffffff',
-                weight: 3,
-                opacity: 0.8
-            }).addTo(map);
-            
-            return arrow;
-        }
-
-        function updateTrackerArrow(arrow, lat, lng, cellInfo) {
-            if (!arrow || !cellInfo || !cellInfo.direction) return;
-            
-            const arrowLength = 0.01;
-            const directionRad = (cellInfo.direction - 90) * Math.PI / 180;
-            
-            const endLat = lat + Math.cos(directionRad) * arrowLength;
-            const endLng = lng + Math.sin(directionRad) * arrowLength;
-            
-            arrow.setLatLngs([[lat, lng], [endLat, endLng]]);
-        }
-
         function removeTracker(mode) {
             const trackerKey = mode + 'Tracker';
             
-            ['', 'Pulse', 'Arrow'].forEach(suffix => {
+            ['', 'Pulse'].forEach(suffix => {
                 const key = trackerKey + suffix;
                 if (trackerMarkers[key]) {
                     map.removeLayer(trackerMarkers[key]);
@@ -976,7 +943,7 @@
         }
 
         function degreesToCardinal(degrees) {
-            if (degrees === null || degrees === undefined || degrees === 'N/A' || degrees < 0) {
+            if (degrees === null || degrees === undefined || degrees === 'N/A' || degrees === '--' || degrees < 0) {
                 return '--';
             }
             
@@ -1090,26 +1057,39 @@
             
             setTimeout(() => map.removeLayer(clickMarker), 500);
             
-            // Create manual cell data
-            cellData.manual = {
-                center: { lat: clickLat, lng: clickLng },
-                speed: 25 + Math.random() * 20, // 25-45 km/h
-                direction: Math.random() * 360,
-                intensity: Math.random() * 100
-            };
-            
-            // Update tracker positions for all frames
-            initializeTrackerPositions();
-            
-            // Create tracker at current frame position
-            updateTrackerForFrame(animationPosition);
-            
-            // Update display
-            updateDataDisplay(cellData.manual);
-            
-            // Update indicator
-            const indicator = document.getElementById('mode-indicator');
-            indicator.textContent = 'Tracking selected rain cell';
+            try {
+                const response = await fetch(apiManualSelectionUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitude: clickLat, longitude: clickLng })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Store manual cell data
+                    cellData.manual = {
+                        center: data.center,
+                        speed: data.speed,
+                        direction: data.direction
+                    };
+                    
+                    // Update tracker positions for all frames
+                    initializeTrackerPositions();
+                    
+                    // Create tracker at current frame position
+                    updateTrackerForFrame(animationPosition);
+                    
+                    // Update display
+                    updateDataDisplay(cellData.manual);
+                    
+                    // Update indicator
+                    const indicator = document.getElementById('mode-indicator');
+                    indicator.textContent = 'Tracking selected rain cell';
+                }
+            } catch (error) {
+                console.error('Error selecting rain cell:', error);
+            }
         }
 
         async function saveLocation() {
@@ -1122,6 +1102,7 @@
             saveBtn.disabled = true;
 
             try {
+                // Update Home Assistant entities
                 const response = await fetch(apiSetLocationUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1132,16 +1113,24 @@
                 });
 
                 if (response.ok) {
-                    const result = await response.json();
+                    // Also update the addon config
+                    await fetch(apiUpdateConfigUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            latitude: newPos.lat, 
+                            longitude: newPos.lng 
+                        })
+                    });
                     
                     // Update local currentLocation
-                    currentLocation.latitude = result.latitude;
-                    currentLocation.longitude = result.longitude;
+                    currentLocation.latitude = newPos.lat;
+                    currentLocation.longitude = newPos.lng;
                     
                     // Save to localStorage for persistence
                     localStorage.setItem('rainPredictor_location', JSON.stringify({
-                        latitude: result.latitude,
-                        longitude: result.longitude
+                        latitude: newPos.lat,
+                        longitude: newPos.lng
                     }));
                     
                     saveBtn.textContent = 'Saved!';
@@ -1173,30 +1162,6 @@
             }
         }
 
-        // Add this function to load saved location on startup
-        function loadSavedLocation() {
-            const saved = localStorage.getItem('rainPredictor_location');
-            if (saved) {
-                try {
-                    const location = JSON.parse(saved);
-                    if (location.latitude && location.longitude) {
-                        currentLocation.latitude = location.latitude;
-                        currentLocation.longitude = location.longitude;
-                        console.log('Loaded saved location:', currentLocation);
-                    }
-                } catch (e) {
-                    console.error('Error loading saved location:', e);
-                }
-            }
-        }
-
-        // Call loadSavedLocation in the DOMContentLoaded event listener:
-        document.addEventListener('DOMContentLoaded', function() {
-            loadSavedLocation(); // Add this line
-            initializeMap();
-            // ... rest of initialization
-        });
-
         function calculateBearing(from, to) {
             const lat1 = from.lat * Math.PI / 180;
             const lat2 = to.lat * Math.PI / 180;
@@ -1215,7 +1180,7 @@
             
             if (data && data.center) {
                 const userLocation = locationMarker.getLatLng();
-                const cellLocation = L.latLng(data.center.lat, data.center.lng);
+                const cellLocation = L.latLng(data.center.lat, data.center.lng || data.center.lon);
                 const distance = userLocation.distanceTo(cellLocation) / 1000; // Convert to km
                 const bearing = calculateBearing(userLocation, cellLocation);
                 const timeToRainMinutes = data.speed > 0 ? (distance / data.speed) * 60 : 999;
@@ -1228,6 +1193,16 @@
                 document.getElementById('speed').innerText = `${data.speed.toFixed(1)} kph`;
                 document.getElementById('direction').innerText = degreesToCardinal(data.direction);
                 document.getElementById('bearing').innerText = degreesToCardinal(bearing);
+            } else if (data) {
+                // Handle data from API that doesn't have center
+                formattedTime = formatTimeToRain(parseFloat(data.time_to_rain) || 999);
+                timeElement.classList.toggle('now', formattedTime === 'NOW');
+                timeElement.innerText = formattedTime;
+                
+                document.getElementById('distance').innerText = data.distance !== '--' ? `${parseFloat(data.distance).toFixed(1)} km` : '--';
+                document.getElementById('speed').innerText = data.speed !== '--' ? `${parseFloat(data.speed).toFixed(1)} kph` : '--';
+                document.getElementById('direction').innerText = degreesToCardinal(data.direction);
+                document.getElementById('bearing').innerText = degreesToCardinal(data.bearing);
             } else {
                 timeElement.classList.remove('now');
                 timeElement.innerText = '--';
@@ -1245,57 +1220,89 @@
                 const response = await fetch(apiDataUrl);
                 if (response.ok) {
                     const data = await response.json();
-                    cellData.auto = data;
                     
-                    // Update tracker positions for all frames
-                    initializeTrackerPositions();
+                    // Parse the data
+                    const timeToRain = parseFloat(data.time_to_rain) || 999;
+                    const distance = parseFloat(data.distance) || 999;
+                    const speed = parseFloat(data.speed) || 0;
+                    const direction = parseFloat(data.direction) || -1;
+                    const bearing = parseFloat(data.bearing) || -1;
                     
-                    // Update tracker for current frame
-                    updateTrackerForFrame(animationPosition);
+                    // Create formatted data
+                    const formattedData = {
+                        time_to_rain: timeToRain,
+                        distance: distance,
+                        speed: speed,
+                        direction: direction,
+                        bearing: bearing,
+                        center: null
+                    };
+                    
+                    // If we have valid data, estimate the center
+                    if (distance < 999 && bearing >= 0) {
+                        const bearingRad = bearing * Math.PI / 180;
+                        const distDeg = distance / 111; // Rough km to degrees
+                        
+                        formattedData.center = {
+                            lat: currentLocation.latitude + Math.cos(bearingRad) * distDeg,
+                            lng: currentLocation.longitude + Math.sin(bearingRad) * distDeg
+                        };
+                        
+                        // Store for tracking
+                        cellData.auto = formattedData;
+                        
+                        // Update tracker positions for all frames
+                        initializeTrackerPositions();
+                        
+                        // Update tracker for current frame
+                        updateTrackerForFrame(animationPosition);
+                    } else {
+                        // Remove auto tracker if no valid data
+                        removeTracker('auto');
+                        cellData.auto = null;
+                    }
                     
                     updateDataDisplay(data);
                 } else {
                     console.error(`API request failed: ${response.status}`);
-                    // Use simulated data for demo
-                    const simData = {
-                        center: {
-                            lat: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
-                            lng: currentLocation.longitude + (Math.random() - 0.5) * 0.5
-                        },
-                        speed: 20 + Math.random() * 30,
-                        direction: Math.random() * 360
-                    };
-                    cellData.auto = simData;
-                    initializeTrackerPositions();
-                    updateTrackerForFrame(animationPosition);
-                    updateDataDisplay(simData);
+                    updateDataDisplay(null);
                 }
             } catch (error) {
                 console.error('Error fetching data:', error);
-                // Use simulated data for demo
-                const simData = {
-                    center: {
-                        lat: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
-                        lng: currentLocation.longitude + (Math.random() - 0.5) * 0.5
-                    },
-                    speed: 20 + Math.random() * 30,
-                    direction: Math.random() * 360
-                };
-                cellData.auto = simData;
-                initializeTrackerPositions();
-                updateTrackerForFrame(animationPosition);
-                updateDataDisplay(simData);
+                updateDataDisplay(null);
+            }
+        }
+
+        async function loadConfiguration() {
+            try {
+                const response = await fetch(apiDataUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.latitude && data.longitude) {
+                        const lat = parseFloat(data.latitude);
+                        const lng = parseFloat(data.longitude);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            currentLocation.latitude = lat;
+                            currentLocation.longitude = lng;
+                            console.log('Loaded location from API:', currentLocation);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading configuration:', error);
             }
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            initializeMap();
-            fetchAndUpdateData();
-            setInterval(() => {
-                if (!manualMode) {
-                    fetchAndUpdateData();
-                }
-            }, 5000);
+            loadConfiguration().then(() => {
+                initializeMap();
+                fetchAndUpdateData();
+                setInterval(() => {
+                    if (!manualMode) {
+                        fetchAndUpdateData();
+                    }
+                }, 5000);
+            });
             
             const controlsPanel = document.getElementById('animation-controls');
             const controlsHeader = controlsPanel.querySelector('.controls-header');

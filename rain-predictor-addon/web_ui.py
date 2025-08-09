@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # /rain-predictor-addon/web_ui.py
 
 import os
@@ -87,7 +88,7 @@ def set_location():
 
     if lat_success and lon_success:
         logging.info("Successfully updated Home Assistant entities")
-        return jsonify({"status": "success", "message": "Location updated"})
+        return jsonify({"status": "success", "message": "Location updated", "latitude": lat, "longitude": lon})
     else:
         logging.error("Failed to update Home Assistant entities")
         return jsonify({"status": "error", "message": "Failed to update Home Assistant entities"}), 500
@@ -122,6 +123,28 @@ def update_config():
     except Exception as e:
         logging.error(f"Failed to update config: {e}")
         return jsonify({"status": "error", "message": "Failed to update config"}), 500
+
+@app.route('/api/manual_selection', methods=['POST'])
+def manual_selection():
+    """Handle manual rain cell selection"""
+    logging.info("manual_selection endpoint called")
+    data = request.get_json()
+    
+    if not data or 'latitude' not in data or 'longitude' not in data:
+        return jsonify({"status": "error", "message": "Invalid data"}), 400
+    
+    lat = data['latitude']
+    lng = data['longitude']
+    
+    # For now, return simulated data
+    # In production, this would analyze the radar at that location
+    import random
+    return jsonify({
+        'center': {'lat': lat, 'lng': lng},
+        'speed': 25 + random.random() * 20,
+        'direction': random.random() * 360,
+        'intensity': random.random() * 100
+    })
 
 @app.route('/health')
 def health_check():
