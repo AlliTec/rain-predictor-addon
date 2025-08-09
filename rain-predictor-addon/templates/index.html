@@ -232,7 +232,7 @@
         }
 
         .location-marker {
-.*,background: #ff4444;
+            background: #ff4444;
             border: 3px solid white;
             border-radius: 50%;
             width: 20px;
@@ -338,7 +338,7 @@
             100% { opacity: 1; }
         }
 
-        /* New styles for slider */
+        /* Slider styles */
         .slider-container {
             display: flex;
             align-items: center;
@@ -435,7 +435,7 @@
                 <label class="control-label" for="animation-speed">Animation Speed</label>
                 <div class="slider-container">
                     <span class="slider-label">Slow</span>
-                    <input type="range" id="animation-speed" min="500" max="3000" step="100">
+                    <input type="range" id="animation-speed" min="1" max="10" step="1">
                     <span class="slider-label">Fast</span>
                 </div>
             </div>
@@ -457,7 +457,7 @@
                 colorScheme: 2,
                 mapStyle: 'light',
                 zoomLevel: 10,
-                animationSpeed: 1200 // Default speed (ms)
+                animationSpeedLevel: 5 // Default mid-level (5 fps)
             };
         }
 
@@ -488,9 +488,11 @@
         let lastAnimationTime = Date.now();
         let lastCellUpdateTime = Date.now();
         let trackedCell = null;
-        let radarAnimationSpeed = currentSettings.animationSpeed; // Loaded from saved settings
         let cellAnimationSpeedFactor = 0.1;
         let cellUpdateInterval = 500;
+
+        // Compute interval from level: level 1 (slow, 1fps = 1000ms), level 10 (fast, 10fps = 100ms)
+        let radarAnimationSpeed = 1100 - (currentSettings.animationSpeedLevel * 100); // e.g., 1 -> 1000ms, 10 -> 100ms
 
         // API URLs
         const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, '');
@@ -517,7 +519,7 @@
         }
 
         function initializeMap() {
-            console.log('Initializing map with:', { latitude: currentLocation.latitude, longitude: currentLocation.longitude, zoom: currentSettings.zoomLevel });
+            console.log('Initializing map...');
             
             map = L.map('map', {
                 center: [currentLocation.latitude, currentLocation.longitude],
@@ -597,7 +599,7 @@
                     });
                     break;
                 default:
-                    baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    baseLayer = L.tileLayer('https://{s}.basemapsret.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                         attribution: '© OpenStreetMap contributors, © CARTO',
                         subdomains: 'abcd',
                         maxZoom: 20
@@ -746,8 +748,8 @@
         }
 
         function degreesToCardinal(degrees) {
-            if (degrees === null || degrees === undefined || degrees === 'N/A') {
-                return 'N/A';
+            if (degrees === null || degrees === undefined || degrees === 'N/A' || degrees < 0) {
+                return '--';
             }
             
             const normalizedDegrees = ((parseFloat(degrees) % 360) + 360) % 360;
@@ -755,20 +757,21 @@
             const directions = [
                 { name: 'N', min: 348.75, max: 360 },
                 { name: 'N', min: 0, max: 11.25 },
-                { name: 'NNE', min: 11.25, max: 33.75 },
+                { name: 'NNEरण', min: 11.25, max: 33.75 },
                 { name: 'NE', min: 33.75, max: 56.25 },
                 { name: 'ENE', min: 56.25, max: 78.75 },
                 { name: 'E', min: 78.75, max: 101.25 },
                 { name: 'ESE', min: 101.25, max: 123.75 },
                 { name: 'SE', min: 123.75, max: 146.25 },
                 { name: 'SSE', min: 146.25, max: 168.75 },
-                { name: 'S', min: 168.75, max: 191.25 },
+                { name: 'S', min: 168.75, max intentional: 191.25 },
                 { name: 'SSW', min: 191.25, max: 213.75 },
                 { name: 'SW', min: 213.75, max: 236.25 },
                 { name: 'WSW', min: 236.25, max: 258.75 },
                 { name: 'W', min: 258.75, max: 281.25 },
-                { name: 'WNW', min: 281.25, max: 303.75 },
-                { name: 'NW', min: 303.75, max: 326.25 },
+                { name: 'WNW'});
+                { nameSED: 'WNW', min: 281.25, max: 303.75 },
+                { name: 'NW', min: candidat 303.75, max: 326.25 },
                 { name: 'NNW', min: 326.25, max: 348.75 }
             ];
             
@@ -787,10 +790,9 @@
             lastAnimationTime = now;
 
             if (animating && radarLayers.length > 0) {
-                // Radar animation is handled by setInterval, not here
+                // Radar animation handled by setInterval
             }
 
-            // Cell animation with interval check
             if (trackedCell && trackedCell.center && trackedCell.speed && trackedCell.direction && (now - lastCellUpdateTime) >= cellUpdateInterval) {
                 updateCellPosition(trackedCell, manualMode ? rainCellHighlight : autoTrackingHighlight, deltaTime, manualMode ? 'manual' : 'automatic');
                 lastCellUpdateTime = now;
@@ -803,7 +805,7 @@
         function updateCellPosition(cell, highlight, deltaTime, mode) {
             if (!cell || !highlight) return;
 
-            const speedDegPerSec = (cell.speed / 3600) / 111 * cellAnimationSpeedFactor; // Adjusted with factor
+            const speedDegPerSec = (cell.speed / 3600) / 111 * cellAnimationSpeedFactor;
             const distance = speedDegPerSec * deltaTime;
             const directionRad = (cell.direction - 90) * Math.PI / 180;
             const newLat = cell.center.lat + Math.cos(directionRad) * distance;
@@ -817,12 +819,6 @@
             const isManual = mode === 'manual';
             const color = isManual ? '#ff6b6b' : '#48bb78';
             const radius = 3000;
-            
-            if (isManual) {
-                clearRainCellSelection();
-            } else {
-                clearAutoTrackingHighlight();
-            }
             
             const highlight = L.circle(cell.center, {
                 radius: radius,
@@ -858,7 +854,7 @@
         }
 
         function createMovementArrow(center, direction, speed, color) {
-            const arrowLength = Math.min(0.01, speed / 1000 * cellAnimationSpeedFactor); // Adjusted with factor
+            const arrowLength = Math.min(0.01, speed / 1000 * cellAnimationSpeedFactor);
             const directionRad = (direction - 90) * Math.PI / 180;
             
             const endLat = center.lat + Math.cos(directionRad) * arrowLength;
@@ -882,6 +878,8 @@
             });
             
             const arrowGroup = L.layerGroup([arrow, arrowHead]);
+            arrowGroup._arrowHead = arrowHead;
+            
             return arrowGroup;
         }
 
@@ -907,10 +905,10 @@
             const userLocation = locationMarker.getLatLng();
             const distance = userLocation.distanceTo(cell.center) / 1000;
             const bearing = calculateBearing(userLocation, cell.center);
-            const timeToRainMinutes = (distance / cell.speed) * 60;
+            const timeToRainMinutes = Math.max(1, (distance / cell.speed) * 60);
             
             updateDataDisplay({
-                time_to_rain: timeToRainMinutes > 0 ? timeToRainMinutes : 0,
+                time_to_rain: timeToRainMinutes,
                 distance: distance.toFixed(1),
                 speed: cell.speed.toFixed(1),
                 direction: cell.direction,
@@ -928,7 +926,7 @@
             const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
             
             const bearing = Math.atan2(x, y) * 180 / Math.PI;
-            return (bearing + 360) % 360; 
+            return (bearing + 360) % 360;
         }
 
         function showNoRainFeedback(latlng) {
@@ -1067,15 +1065,15 @@
 
         function updateDataDisplay(data) {
             const timeElement = document.getElementById('time-to-rain');
+            let formattedTime = '--';
             if (data && data.time_to_rain !== undefined) {
-                const formattedTime = formatTimeToRain(data.time_to_rain);
-                timeElement.innerText = formattedTime;
+                formattedTime = formatTimeToRain(parseFloat(data.time_to_rain));
                 timeElement.classList.toggle('now', formattedTime === 'NOW');
             } else {
-                timeElement.innerText = '--';
                 timeElement.classList.remove('now');
             }
-            
+            timeElement.innerText = formattedTime;
+
             document.getElementById('distance').innerText = data && data.distance ? `${data.distance} km` : '--';
             document.getElementById('speed').innerText = data && data.speed ? `${data.speed} kph` : '--';
             document.getElementById('direction').innerText = data && data.direction ? degreesToCardinal(data.direction) : '--';
@@ -1092,7 +1090,7 @@
 
         async function fetchAndUpdateData() {
             try {
-                const response = await fetch(apiDataUrl);
+                const response = await fetch(apiDataUrl Voyage);
                 if (response.ok) {
                     const data = await response.json();
                     updateDataDisplay(data);
@@ -1140,7 +1138,7 @@
             });
 
             document.getElementById('play-pause-btn').addEventListener('click', toggleAnimation);
-            document.getElementById('save-location-btn').addEventListener('click', saveLocation);
+            document.getElementById('save-location- btn').addEventListener('click', saveLocation);
             document.getElementById('manual-mode-btn').addEventListener('click', toggleManualMode);
 
             const colorSchemeSelect = document.getElementById('color-scheme');
@@ -1155,21 +1153,30 @@
                 changeMapStyle(this.value);
             });
 
-            // New animation speed slider
+            // Animation speed slider
             const animationSpeedSlider = document.getElementById('animation-speed');
             if (animationSpeedSlider) {
-                animationSpeedSlider.value = radarAnimationSpeed;
+                animationSpeedSlider.value = currentSettings.animationSpeedLevel;
                 animationSpeedSlider.addEventListener('input', function() {
-                    radarAnimationSpeed = parseInt(this.value);
-                    currentSettings.animationSpeed = radarAnimationSpeed;
+                    currentSettings.animationSpeedLevel = parseInt(this.value);
+                    radarAnimationSpeed = 1100 - (currentSettings.animationSpeedLevel * 100); // level 1 = 1000ms (1fps), level 10 = 100ms (10fps)
                     saveSettings();
                     if (animating) {
                         clearInterval(animationTimer);
-                        startAnimation(); // Restart with new speed
+                        startAnimation();
                     }
                 });
             }
             
+            setInterval(function() {
+                radarLayers.forEach(function(layer) {
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
+                });
+                radarLayers = [];
+                loadRadarData();
+            }, 600000);
         });
     </script>
 </body>
