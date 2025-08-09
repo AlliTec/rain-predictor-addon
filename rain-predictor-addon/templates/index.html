@@ -274,17 +274,17 @@
             transform: none;
         }
 
-        /* Manual selection mode button */
-        #manual-mode-btn {
+        /* Manual selection mode button - moved to controls panel */
+        .manual-mode-control {
+            margin-bottom: 10px;
+        }
+
+        .manual-mode-btn {
+            width: 100%;
             background: #4299e1;
             color: white;
-            position: absolute;
-            top: 60px;
-            right: 10px;
-            z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             border: none;
-            padding: 8px 16px;
+            padding: 8px 12px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
@@ -292,20 +292,12 @@
             transition: all 0.3s ease;
         }
 
-        #manual-mode-btn:hover {
+        .manual-mode-btn:hover {
             background: #3182ce;
-            transform: translateY(-1px);
         }
 
-        #manual-mode-btn.active {
+        .manual-mode-btn.active {
             background: #e53e3e;
-            animation: pulse-button 2s infinite;
-        }
-
-        @keyframes pulse-button {
-            0% { box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-            50% { box-shadow: 0 2px 15px rgba(229, 62, 62, 0.4); }
-            100% { box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
         }
 
         /* Selection rectangle styling */
@@ -343,7 +335,7 @@
         /* Mode indicator */
         .mode-indicator {
             position: absolute;
-            top: 110px;
+            top: 60px;
             right: 10px;
             z-index: 1000;
             background: rgba(0, 0, 0, 0.8);
@@ -377,7 +369,6 @@
 
     <div id="map"></div>
     <button class="control-btn" id="save-location-btn">Save Location</button>
-    <button class="control-btn" id="manual-mode-btn">Manual Select</button>
     <div class="mode-indicator" id="mode-indicator">Click and drag to select rain cell</div>
 
     <div id="data-panel">
@@ -401,6 +392,10 @@
         
         <!-- Expandable content -->
         <div class="controls-content">
+            <div class="control-section manual-mode-control">
+                <button class="manual-mode-btn" id="manual-mode-btn">Manual Select</button>
+            </div>
+            
             <div class="control-section">
                 <span class="control-label">Animation</span>
                 <button class="control-btn" id="play-pause-btn">⏸️</button>
@@ -825,6 +820,68 @@
                 // Re-fetch data to restore auto-tracking highlight
                 setTimeout(fetchAndUpdateData, 500);
             }
+        }
+
+        // BETTER FIX: Map initialization that starts with the correct style
+        function initializeMap() {
+            const savedZoom = getSavedZoomLevel();
+            
+            console.log('Initializing map with:', { latitude, longitude, zoom: savedZoom });
+            
+            // Ensure we have valid coordinates
+            if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
+                console.error('Invalid coordinates:', { latitude, longitude });
+                return;
+            }
+            
+            map = L.map('map', {
+                center: [latitude, longitude],
+                zoom: savedZoom,
+                zoomControl: true,
+                attributionControl: false
+            });
+
+            // FIXED: Create initial base layer with the saved style
+            createBaseLayerForStyle(currentSettings.mapStyle);
+
+            // Add scale control to bottom left corner
+            L.control.scale({
+                position: 'bottomleft',
+                metric: true,
+                imperial: false,
+                maxWidth: 150
+            }).addTo(map);
+
+            // Save zoom level when it changes
+            map.on('zoomend', function() {
+                saveZoomLevel(map.getZoom());
+            });
+
+            const locationIcon = L.divIcon({
+                className: 'location-marker',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+
+            locationMarker = L.marker([latitude, longitude], { 
+                icon: locationIcon,
+                draggable: true
+            })
+            .addTo(map)
+            .bindPopup('Your Location (Drag to move)')
+            .openPopup();
+
+            locationMarker.on('dragstart', function() {
+                document.getElementById('save-location-btn').style.display = 'block';
+            });
+
+            locationMarker.on('dragend', function() {
+                const newPos = locationMarker.getLatLng();
+                console.log('Marker moved to:', newPos.lat, newPos.lng);
+            });
+
+            console.log('Map initialized successfully');
+            loadRadarData();
         }
         }
 
