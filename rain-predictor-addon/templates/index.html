@@ -307,24 +307,45 @@
             background: rgba(229, 62, 62, 0.9);
         }
 
-        /* Rain cell tracking animations */
+        /* Rain tracker styles */
+        .rain-tracker {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .rain-tracker-auto {
+            background: #48bb78;
+        }
+
+        .rain-tracker-manual {
+            background: #e53e3e;
+        }
+
         @keyframes pulse-ring {
             0% {
-                transform: scale(0.8);
-                opacity: 1;
+                transform: scale(1);
+                opacity: 0.8;
             }
             100% {
-                transform: scale(2);
+                transform: scale(2.5);
                 opacity: 0;
             }
         }
 
-        .rain-tracker-auto {
-            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        .tracker-pulse {
+            animation: pulse-ring 2s ease-out infinite;
         }
 
-        .rain-tracker-manual {
-            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        .tracker-arrow {
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 20px solid;
+            transform-origin: center bottom;
         }
 
         .data-value.now {
@@ -508,15 +529,17 @@
         let locationMarker;
         let manualMode = false;
         
-        // Tracking markers
-        let manualTracker = null;
-        let autoTracker = null;
-        let trackerAnimation = null;
-        let pulseMarkers = [];
+        // Tracking markers and data
+        let trackerMarkers = {};
+        let trackerPositions = [];
+        let cellData = {
+            manual: null,
+            auto: null
+        };
         
-        // Cell data
-        let manualCellData = null;
-        let autoCellData = null;
+        // Time tracking for frame interpolation
+        let frameTimestamps = [];
+        let timePerFrame = 300; // 5 minutes per frame typical for weather radar
         
         let radarAnimationSpeed = Math.round(1000 / currentSettings.animationSpeedLevel);
 
@@ -595,7 +618,6 @@
 
             console.log('Map initialized successfully');
             loadRadarData();
-            startTrackerAnimation();
         }
 
         function createBaseLayerForStyle(style) {
@@ -645,6 +667,14 @@
                 radarData = data.radar.past;
                 console.log(`Loaded ${radarData.length} radar frames`);
                 
+                // Store frame timestamps for interpolation
+                frameTimestamps = radarData.map(frame => frame.time);
+                
+                // Calculate actual time between frames
+                if (frameTimestamps.length > 1) {
+                    timePerFrame = (frameTimestamps[frameTimestamps.length - 1] - frameTimestamps[0]) / (frameTimestamps.length - 1);
+                }
+                
                 radarLayers.forEach(function(layer) {
                     if (map.hasLayer(layer)) {
                         map.removeLayer(layer);
@@ -669,6 +699,9 @@
                 updateTimeDisplay();
                 startAnimation();
                 
+                // Initialize tracker positions for each frame
+                initializeTrackerPositions();
+                
             } catch (error) {
                 console.error('Error loading radar data:', error);
                 const timeDisplay = document.getElementById('time-display');
@@ -678,17 +711,188 @@
             }
         }
 
+        function initializeTrackerPositions() {
+            trackerPositions = [];
+            const activeCell = manualMode ? cellData.manual : cellData.auto;
+            
+            if (!activeCell || !activeCell.center) return;
+            
+            // Calculate positions for each frame based on movement
+            for (let i = 0; i < radarData.length; i++) {
+                const timeDiff = i * (timePerFrame / 3600); // Hours difference
+                const distance = activeCell.speed * timeDiff; // km traveled
+                
+                // Convert to lat/lng offset
+                const latOffset = (distance * Math.cos((activeCell.direction - 90) * Math.PI / 180)) / 111;
+                const lngOffset = (distance * Math.sin((activeCell.direction - 90) * Math.PI / 180)) / (111 * Math.cos(activeCell.center.lat * Math.PI / 180));
+                
+                trackerPositions.push({
+                    lat: activeCell.center.lat + latOffset,
+                    lng: activeCell.center.lng + lngOffset
+                });
+            }
+        }
+
         function startAnimation() {
             if (animationTimer) clearInterval(animationTimer);
             
             animationTimer = setInterval(function() {
                 if (animating && radarLayers.length > 0) {
+                    // Hide current frame
                     radarLayers[animationPosition].setOpacity(0);
+                    
+                    // Move to next frame
                     animationPosition = (animationPosition + 1) % radarLayers.length;
+                    
+                    // Show next frame
                     radarLayers[animationPosition].setOpacity(0.6);
+                    
+                    // Update tracker position synchronized with frame
+                    updateTrackerForFrame(animationPosition);
+                    
                     updateTimeDisplay();
                 }
             }, radarAnimationSpeed);
+        }
+
+        function updateTrackerForFrame(frameIndex) {
+            const activeMode = manualMode ? 'manual' : 'auto';
+            const activeCell = cellData[activeMode];
+            
+            if (!activeCell || !activeCell.center) return;
+            
+            // Calculate position for this specific frame
+            const frameTime = frameTimestamps[frameIndex];
+            const startTime = frameTimestamps[0];
+            const timeDiffSeconds = frameTime - startTime;
+            const timeDiffHours = timeDiffSeconds / 3600;
+            
+            // Calculate distance traveled
+            const distance = activeCell.speed * timeDiffHours; // km
+            
+            // Calculate new position
+            const directionRad = (activeCell.direction - 90) * Math.PI / 180;
+            const latOffset = (distance * Math.cos(directionRad)) / 111;
+            const lngOffset = (distance * Math.sin(directionRad)) / (111 * Math.cos(activeCell.center.lat * Math.PI / 180));
+            
+            const newLat = activeCell.center.lat + latOffset;
+            const newLng = activeCell.center.lng + lngOffset;
+            
+            // Update or create tracker
+            updateTracker(newLat, newLng, activeMode);
+        }
+
+        function updateTracker(lat, lng, mode) {
+            const color = mode === 'manual' ? '#e53e3e' : '#48bb78';
+            const trackerKey = mode + 'Tracker';
+            
+            if (trackerMarkers[trackerKey]) {
+                // Update existing tracker position
+                trackerMarkers[trackerKey].setLatLng([lat, lng]);
+                
+                // Update pulse ring if exists
+                if (trackerMarkers[trackerKey + 'Pulse']) {
+                    trackerMarkers[trackerKey + 'Pulse'].setLatLng([lat, lng]);
+                }
+                
+                // Update arrow if exists
+                if (trackerMarkers[trackerKey + 'Arrow']) {
+                    updateTrackerArrow(trackerMarkers[trackerKey + 'Arrow'], lat, lng, cellData[mode]);
+                }
+            } else {
+                // Create new tracker
+                createTracker(lat, lng, mode);
+            }
+        }
+
+        function createTracker(lat, lng, mode) {
+            const color = mode === 'manual' ? '#e53e3e' : '#48bb78';
+            const trackerKey = mode + 'Tracker';
+            
+            // Remove old tracker if exists
+            removeTracker(mode);
+            
+            // Create main tracker icon
+            const trackerIcon = L.divIcon({
+                className: `rain-tracker rain-tracker-${mode === 'manual' ? 'manual' : 'auto'}`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+                html: `<div style="width: 100%; height: 100%; background: ${color}; border-radius: 50%; border: 3px solid white;"></div>`
+            });
+            
+            trackerMarkers[trackerKey] = L.marker([lat, lng], {
+                icon: trackerIcon,
+                zIndexOffset: 1000
+            }).addTo(map);
+            
+            // Add pulse effect
+            const pulseCircle = L.circle([lat, lng], {
+                radius: 1000,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.2,
+                weight: 2,
+                className: 'tracker-pulse'
+            }).addTo(map);
+            
+            trackerMarkers[trackerKey + 'Pulse'] = pulseCircle;
+            
+            // Add direction arrow
+            if (cellData[mode]) {
+                const arrow = createTrackerArrow(lat, lng, cellData[mode]);
+                if (arrow) {
+                    trackerMarkers[trackerKey + 'Arrow'] = arrow;
+                }
+            }
+            
+            // Add label
+            trackerMarkers[trackerKey].bindTooltip(mode === 'manual' ? 'Manual Track' : 'Auto Track', {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -20]
+            });
+        }
+
+        function createTrackerArrow(lat, lng, cellInfo) {
+            if (!cellInfo || !cellInfo.direction) return null;
+            
+            const arrowLength = 0.01; // Length of arrow in degrees
+            const directionRad = (cellInfo.direction - 90) * Math.PI / 180;
+            
+            const endLat = lat + Math.cos(directionRad) * arrowLength;
+            const endLng = lng + Math.sin(directionRad) * arrowLength;
+            
+            const arrow = L.polyline([[lat, lng], [endLat, endLng]], {
+                color: '#ffffff',
+                weight: 3,
+                opacity: 0.8
+            }).addTo(map);
+            
+            return arrow;
+        }
+
+        function updateTrackerArrow(arrow, lat, lng, cellInfo) {
+            if (!arrow || !cellInfo || !cellInfo.direction) return;
+            
+            const arrowLength = 0.01;
+            const directionRad = (cellInfo.direction - 90) * Math.PI / 180;
+            
+            const endLat = lat + Math.cos(directionRad) * arrowLength;
+            const endLng = lng + Math.sin(directionRad) * arrowLength;
+            
+            arrow.setLatLngs([[lat, lng], [endLat, endLng]]);
+        }
+
+        function removeTracker(mode) {
+            const trackerKey = mode + 'Tracker';
+            
+            ['', 'Pulse', 'Arrow'].forEach(suffix => {
+                const key = trackerKey + suffix;
+                if (trackerMarkers[key]) {
+                    map.removeLayer(trackerMarkers[key]);
+                    delete trackerMarkers[key];
+                }
+            });
         }
 
         function toggleAnimation() {
@@ -807,106 +1011,6 @@
             return `N (${Math.round(normalizedDegrees)}°)`;
         }
 
-        // Create and update tracker markers
-        function createTrackerMarker(lat, lng, color, mode) {
-            // Remove existing tracker for this mode
-            if (mode === 'manual' && manualTracker) {
-                map.removeLayer(manualTracker);
-                manualTracker = null;
-            } else if (mode === 'auto' && autoTracker) {
-                map.removeLayer(autoTracker);
-                autoTracker = null;
-            }
-            
-            // Clear old pulse markers
-            pulseMarkers.forEach(marker => map.removeLayer(marker));
-            pulseMarkers = [];
-            
-            // Create main tracker marker
-            const tracker = L.circleMarker([lat, lng], {
-                radius: 10,
-                fillColor: color,
-                color: 'white',
-                weight: 3,
-                opacity: 1,
-                fillOpacity: 0.8
-            }).addTo(map);
-            
-            // Create pulse rings
-            for (let i = 0; i < 3; i++) {
-                setTimeout(() => {
-                    const pulse = L.circle([lat, lng], {
-                        radius: 500,
-                        fillColor: color,
-                        fillOpacity: 0,
-                        color: color,
-                        weight: 2,
-                        opacity: 0.6,
-                        className: mode === 'manual' ? 'rain-tracker-manual' : 'rain-tracker-auto'
-                    }).addTo(map);
-                    pulseMarkers.push(pulse);
-                }, i * 700);
-            }
-            
-            // Add label
-            const label = L.tooltip({
-                permanent: true,
-                direction: 'top',
-                offset: [0, -15],
-                className: 'tracker-label'
-            })
-            .setContent(mode === 'manual' ? 'Manual Track' : 'Auto Track')
-            .setLatLng([lat, lng]);
-            
-            tracker.bindTooltip(label);
-            
-            if (mode === 'manual') {
-                manualTracker = tracker;
-            } else {
-                autoTracker = tracker;
-            }
-            
-            return tracker;
-        }
-
-        function updateTrackerPosition(tracker, cellData, mode) {
-            if (!tracker || !cellData) return;
-            
-            const speed = cellData.speed || 0;
-            const direction = cellData.direction || 0;
-            
-            // Calculate new position based on speed and direction
-            const speedKmPerMin = speed / 60;
-            const speedDegPerMin = speedKmPerMin / 111; // Rough conversion km to degrees
-            
-            const directionRad = (direction - 90) * Math.PI / 180; // Convert to radians, adjust for map orientation
-            
-            const currentPos = tracker.getLatLng();
-            const newLat = currentPos.lat + (Math.sin(directionRad) * speedDegPerMin / 10); // Divided by 10 for smoother animation
-            const newLng = currentPos.lng + (Math.cos(directionRad) * speedDegPerMin / 10);
-            
-            tracker.setLatLng([newLat, newLng]);
-            
-            // Update pulse rings
-            pulseMarkers.forEach(pulse => {
-                if (pulse && pulse.setLatLng) {
-                    pulse.setLatLng([newLat, newLng]);
-                }
-            });
-        }
-
-        function startTrackerAnimation() {
-            if (trackerAnimation) return;
-            
-            trackerAnimation = setInterval(() => {
-                if (manualMode && manualTracker && manualCellData) {
-                    updateTrackerPosition(manualTracker, manualCellData, 'manual');
-                } else if (!manualMode && autoTracker && autoCellData) {
-                    updateTrackerPosition(autoTracker, autoCellData, 'auto');
-                }
-            }, 100); // Update every 100ms for smooth animation
-        }
-
         function toggleControls() {
             const controls = document.getElementById('animation-controls');
             controls.classList.toggle('collapsed');
@@ -924,24 +1028,15 @@
             const btn = document.getElementById('manual-mode-btn');
             const indicator = document.getElementById('mode-indicator');
             
-            // Clear existing trackers
-            if (manualTracker) {
-                map.removeLayer(manualTracker);
-                manualTracker = null;
-            }
-            if (autoTracker) {
-                map.removeLayer(autoTracker);
-                autoTracker = null;
-            }
-            pulseMarkers.forEach(marker => map.removeLayer(marker));
-            pulseMarkers = [];
-            
             if (manualMode) {
                 btn.textContent = 'Exit Manual';
                 btn.classList.add('active');
                 indicator.classList.add('manual-mode');
                 indicator.style.display = 'block';
                 indicator.textContent = 'Click on the map where you see rain';
+                
+                // Remove auto tracker
+                removeTracker('auto');
                 
                 // Show instruction overlay
                 const instruction = document.createElement('div');
@@ -957,8 +1052,11 @@
                 indicator.classList.remove('manual-mode');
                 indicator.style.display = 'none';
                 
+                // Remove manual tracker
+                removeTracker('manual');
+                cellData.manual = null;
+                
                 disableClickSelection();
-                manualCellData = null;
                 
                 // Restore automatic tracking
                 fetchAndUpdateData();
@@ -981,7 +1079,7 @@
             const clickLat = e.latlng.lat;
             const clickLng = e.latlng.lng;
             
-            // Create visual feedback for click
+            // Visual feedback
             const clickMarker = L.circleMarker([clickLat, clickLng], {
                 radius: 5,
                 fillColor: '#ff0000',
@@ -992,29 +1090,26 @@
             
             setTimeout(() => map.removeLayer(clickMarker), 500);
             
-            try {
-                // For demo purposes, simulate rain cell data
-                // In production, this would call your API
-                manualCellData = {
-                    center: { lat: clickLat, lng: clickLng },
-                    speed: 25 + Math.random() * 20, // Random speed 25-45 km/h
-                    direction: Math.random() * 360, // Random direction
-                    intensity: Math.random() * 100
-                };
-                
-                // Create tracker at clicked location
-                createTrackerMarker(clickLat, clickLng, '#ff6b6b', 'manual');
-                
-                // Update display with manual cell data
-                updateDataDisplay(manualCellData);
-                
-                // Show confirmation
-                const indicator = document.getElementById('mode-indicator');
-                indicator.textContent = 'Tracking selected rain cell';
-                
-            } catch (error) {
-                console.error('Error selecting rain cell:', error);
-            }
+            // Create manual cell data
+            cellData.manual = {
+                center: { lat: clickLat, lng: clickLng },
+                speed: 25 + Math.random() * 20, // 25-45 km/h
+                direction: Math.random() * 360,
+                intensity: Math.random() * 100
+            };
+            
+            // Update tracker positions for all frames
+            initializeTrackerPositions();
+            
+            // Create tracker at current frame position
+            updateTrackerForFrame(animationPosition);
+            
+            // Update display
+            updateDataDisplay(cellData.manual);
+            
+            // Update indicator
+            const indicator = document.getElementById('mode-indicator');
+            indicator.textContent = 'Tracking selected rain cell';
         }
 
         async function saveLocation() {
@@ -1072,58 +1167,66 @@
             const timeElement = document.getElementById('time-to-rain');
             let formattedTime = '--';
             
-            if (data) {
-                let cellData = manualMode ? manualCellData : data;
+            if (data && data.center) {
+                const userLocation = locationMarker.getLatLng();
+                const cellLocation = L.latLng(data.center.lat, data.center.lng);
+                const distance = userLocation.distanceTo(cellLocation) / 1000; // Convert to km
+                const bearing = calculateBearing(userLocation, cellLocation);
+                const timeToRainMinutes = data.speed > 0 ? (distance / data.speed) * 60 : 999;
                 
-                if (cellData && cellData.center) {
-                    const userLocation = locationMarker.getLatLng();
-                    const cellLocation = L.latLng(cellData.center.lat, cellData.center.lng);
-                    const distance = userLocation.distanceTo(cellLocation) / 1000; // Convert to km
-                    const bearing = calculateBearing(userLocation, cellLocation);
-                    const timeToRainMinutes = cellData.speed > 0 ? (distance / cellData.speed) * 60 : 999;
-                    
-                    formattedTime = formatTimeToRain(timeToRainMinutes);
-                    timeElement.classList.toggle('now', formattedTime === 'NOW');
-                    timeElement.innerText = formattedTime;
-                    
-                    document.getElementById('distance').innerText = `${distance.toFixed(1)} km`;
-                    document.getElementById('speed').innerText = `${cellData.speed.toFixed(1)} kph`;
-                    document.getElementById('direction').innerText = degreesToCardinal(cellData.direction);
-                    document.getElementById('bearing').innerText = degreesToCardinal(bearing);
-                    
-                    // Create or update tracker
-                    if (!manualMode) {
-                        autoCellData = cellData;
-                        if (!autoTracker || !map.hasLayer(autoTracker)) {
-                            createTrackerMarker(cellData.center.lat, cellData.center.lng, '#48bb78', 'auto');
-                        }
-                    }
-                } else {
-                    timeElement.classList.remove('now');
-                    timeElement.innerText = '--';
-                    document.getElementById('distance').innerText = '--';
-                    document.getElementById('speed').innerText = '--';
-                    document.getElementById('direction').innerText = '--';
-                    document.getElementById('bearing').innerText = '--';
-                }
+                formattedTime = formatTimeToRain(timeToRainMinutes);
+                timeElement.classList.toggle('now', formattedTime === 'NOW');
+                timeElement.innerText = formattedTime;
+                
+                document.getElementById('distance').innerText = `${distance.toFixed(1)} km`;
+                document.getElementById('speed').innerText = `${data.speed.toFixed(1)} kph`;
+                document.getElementById('direction').innerText = degreesToCardinal(data.direction);
+                document.getElementById('bearing').innerText = degreesToCardinal(bearing);
+            } else {
+                timeElement.classList.remove('now');
+                timeElement.innerText = '--';
+                document.getElementById('distance').innerText = '--';
+                document.getElementById('speed').innerText = '--';
+                document.getElementById('direction').innerText = '--';
+                document.getElementById('bearing').innerText = '--';
             }
         }
 
         async function fetchAndUpdateData() {
-            if (manualMode) return; // Don't fetch automatic data in manual mode
+            if (manualMode) return;
             
             try {
                 const response = await fetch(apiDataUrl);
                 if (response.ok) {
                     const data = await response.json();
+                    cellData.auto = data;
+                    
+                    // Update tracker positions for all frames
+                    initializeTrackerPositions();
+                    
+                    // Update tracker for current frame
+                    updateTrackerForFrame(animationPosition);
+                    
                     updateDataDisplay(data);
                 } else {
                     console.error(`API request failed: ${response.status}`);
-                    updateDataDisplay(null);
+                    // Use simulated data for demo
+                    const simData = {
+                        center: {
+                            lat: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
+                            lng: currentLocation.longitude + (Math.random() - 0.5) * 0.5
+                        },
+                        speed: 20 + Math.random() * 30,
+                        direction: Math.random() * 360
+                    };
+                    cellData.auto = simData;
+                    initializeTrackerPositions();
+                    updateTrackerForFrame(animationPosition);
+                    updateDataDisplay(simData);
                 }
             } catch (error) {
                 console.error('Error fetching data:', error);
-                // For demo, create simulated data
+                // Use simulated data for demo
                 const simData = {
                     center: {
                         lat: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
@@ -1132,6 +1235,9 @@
                     speed: 20 + Math.random() * 30,
                     direction: Math.random() * 360
                 };
+                cellData.auto = simData;
+                initializeTrackerPositions();
+                updateTrackerForFrame(animationPosition);
                 updateDataDisplay(simData);
             }
         }
