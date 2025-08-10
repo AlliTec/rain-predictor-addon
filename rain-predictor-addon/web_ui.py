@@ -6,9 +6,22 @@ import json
 from flask import Flask, render_template, jsonify, request
 import requests
 import logging
+import io
+import math
+import numpy as np
+from PIL import Image
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Radar sampling/analysis settings for manual selection
+IMAGE_SIZE = 256
+ZOOM = 8
+COLOR_SCHEME = 3            # matches your UI default, adjust if needed
+LAT_RANGE_DEG = 1.80        # must match predictor’s analysis_settings.lat_range_deg
+LON_RANGE_DEG = 1.99        # must match predictor’s analysis_settings.lon_range_deg
+RAIN_THRESHOLD = 60         # grayscale threshold (0–255) for "rain" pixels
+MAX_FRAMES = 5              # how many past frames to use (recent frames are more relevant)
 
 class HomeAssistantAPI:
     def __init__(self):
@@ -60,11 +73,150 @@ def get_all_data():
         'longitude': get_ha_state('input_number.rain_prediction_longitude', 151.86)
     }
 
-@app.route('/')
-def index():
-    lat = get_ha_state('input_number.rain_prediction_latitude', -24.98)
-    lon = get_ha_state('input_number.rain_prediction_longitude', 151.86)
-    return render_template('index.html', latitude=lat, longitude=lon)
+def _km_per_deg(lat_deg: float):
+    # Rough conversions; good enough at this scale
+    km_per_deg_lat = 111.0
+    km_per_deg_lon = 111.0 * math.cos(math.radians(lat_deg))
+    return km_per_deg_lat, km_per_deg_lon
+
+def _frame_url(host: str, frame_path: str, lat: float, lng: float) -> str:
+    # Build a RainViewer tile URL centered at the click point
+    return f"{host}{frame_path}/{IMAGE_SIZE}/{ZOOM}/{lat}/{lng}/{COLOR_SCHEME}/0_0.png"
+
+def _download_grayscale(url: str):
+    try:
+        resp = requests.get(url, timeout=12)
+        resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content)).convert("L")
+        return np.array(img)
+    except Exception as e:
+        logging.warning(f"Failed to download/process frame {url}: {e}")
+        return None
+
+def _weighted_centroid(img_gray: np.ndarray, threshold: int):
+    # Compute intensity-weighted centroid of pixels above threshold
+    mask = img_gray > threshold
+    if not np.any(mask):
+        return None
+    ys, xs = np.nonzero(mask)
+    weights = img_gray[mask].astype(np.float32)
+    # Avoid divide-by-zero
+    wsum = weights.sum()
+    if wsum <= 0:
+        return None
+    cx = float((xs * weights).sum() / wsum)
+    cy = float((ys * weights).sum() / wsum)
+    return cx, cy
+
+def _estimate_prevailing_motion(click_lat: float, click_lng: float):
+    """
+    Returns (speed_kph, direction_deg) estimated from recent frames centered at click.
+    Direction: 0 = North, 90 = East, 180 = South, 270 = West.
+    """
+    try:
+        meta = requests.get("https://api.rainviewer.com/public/weather-maps.json", timeout=10).json()
+        host = meta.get("host")
+        past = meta.get("radar", {}).get("past", [])
+        if not host or not past or len(past) < 2:
+            return None
+
+        # Use only the most recent frames (up to MAX_FRAMES)
+        frames = past[-MAX_FRAMES:]
+
+        # Collect centroids and timestamps
+        centroids = []  # list of (time_epoch, cx, cy)
+        for f in frames:
+            url = _frame_url(host, f.get("path", ""), click_lat, click_lng)
+            img = _download_grayscale(url)
+            if img is None:
+                continue
+            c = _weighted_centroid(img, RAIN_THRESHOLD)
+            if c is None:
+                continue
+            centroids.append((int(f.get("time", 0)), c[0], c[1]))
+
+        if len(centroids) < 2:
+            return None
+
+        # Pixel-to-degree increments
+        lat_inc = LAT_RANGE_DEG / IMAGE_SIZE
+        lon_inc = LON_RANGE_DEG / IMAGE_SIZE
+
+        # Average velocity components in km/h (north-positive, east-positive)
+        vx_east_kph = 0.0
+        vy_north_kph = 0.0
+        n = 0
+
+        for (t1, cx1, cy1), (t2, cx2, cy2) in zip(centroids[:-1], centroids[1:]):
+            dt_h = max(1e-6, (t2 - t1) / 3600.0)
+
+            # Pixel deltas: x increases to the right (east), y increases downward (south)
+            dx_pix = cx2 - cx1
+            dy_pix = cy2 - cy1
+
+            # Convert pixel displacement to degree offsets around the click center
+            dlat_deg = -dy_pix * lat_inc      # negative because y-down is south
+            dlon_deg = dx_pix * lon_inc
+
+            km_per_deg_lat, km_per_deg_lon = _km_per_deg(click_lat)
+            dN_km = dlat_deg * km_per_deg_lat
+            dE_km = dlon_deg * km_per_deg_lon
+
+            vx_east_kph += (dE_km / dt_h)
+            vy_north_kph += (dN_km / dt_h)
+            n += 1
+
+        if n == 0:
+            return None
+
+        vx_east_kph /= n
+        vy_north_kph /= n
+
+        speed_kph = math.hypot(vx_east_kph, vy_north_kph)
+
+        # Bearing: 0=N, 90=E. atan2(x, y) with (east, north).
+        direction_deg = (math.degrees(math.atan2(vx_east_kph, vy_north_kph)) + 360.0) % 360.0
+
+        # Guardrails
+        if not math.isfinite(speed_kph) or not math.isfinite(direction_deg):
+            return None
+
+        return float(speed_kph), float(direction_deg)
+
+    except Exception as e:
+        logging.error(f"Error estimating prevailing motion: {e}")
+        return None
+
+@app.route('/api/manual_selection', methods=['POST'])
+def manual_selection():
+    """Handle manual rain cell selection using prevailing motion estimation."""
+    logging.info("manual_selection endpoint called")
+    data = request.get_json()
+
+    if not data or 'latitude' not in data or 'longitude' not in data:
+        return jsonify({"status": "error", "message": "Invalid data"}), 400
+
+    lat = float(data['latitude'])
+    lng = float(data['longitude'])
+
+    # Try to estimate prevailing motion from recent frames
+    result = _estimate_prevailing_motion(lat, lng)
+
+    if result is None:
+        # Fallback if we couldn't estimate motion
+        # Choose a conservative default (e.g., slow easterly drift)
+        speed_kph = 15.0
+        direction_deg = 90.0
+        logging.warning("Prevailing motion estimation failed; using fallback values.")
+    else:
+        speed_kph, direction_deg = result
+
+    return jsonify({
+        "center": {"lat": lat, "lng": lng},
+        "speed": round(speed_kph, 1),
+        "direction": round(direction_deg, 1),
+        "intensity": None
+    })
 
 @app.route('/api/data')
 def api_data():
