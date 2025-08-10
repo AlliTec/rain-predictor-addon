@@ -715,8 +715,8 @@
             trackerPositions = [];
             const activeCell = manualMode ? cellData.manual : cellData.auto;
             
-            if (!activeCell || !activeCell.center) return;
-            
+            if (!activeCell || !activeCell.center || !radarData || radarData.length === 0) return;
+
             // Calculate positions for each frame based on movement
             for (let i = 0; i < radarData.length; i++) {
                 const timeDiff = i * (timePerFrame / 3600); // Hours difference
@@ -759,28 +759,34 @@
         function updateTrackerForFrame(frameIndex) {
             const activeMode = manualMode ? 'manual' : 'auto';
             const activeCell = cellData[activeMode];
-            
             if (!activeCell || !activeCell.center) return;
-            
-            // Calculate position for this specific frame
+
+            // If radar frames/timestamps are not ready, just pin at center
+            if (!frameTimestamps || frameTimestamps.length === 0 || frameIndex >= frameTimestamps.length) {
+                updateTracker(activeCell.center.lat, activeCell.center.lng, activeMode);
+                return;
+            }
+
             const frameTime = frameTimestamps[frameIndex];
             const startTime = frameTimestamps[0];
             const timeDiffSeconds = frameTime - startTime;
             const timeDiffHours = timeDiffSeconds / 3600;
-            
-            // Calculate distance traveled
+
             const distance = activeCell.speed * timeDiffHours; // km
-            
-            // Calculate new position
+
             const theta = activeCell.direction * Math.PI / 180; // 0°=N, 90°=E
             const latOffset = (distance * Math.cos(theta)) / 111;
             const lngOffset = (distance * Math.sin(theta)) / (111 * Math.cos(activeCell.center.lat * Math.PI / 180));
 
             const newLat = activeCell.center.lat + latOffset;
             const newLng = activeCell.center.lng + lngOffset;
-            
-            // Update or create tracker
-            updateTracker(newLat, newLng, activeMode);
+
+            if (Number.isFinite(newLat) && Number.isFinite(newLng)) {
+                updateTracker(newLat, newLng, activeMode);
+            } else {
+                // Fallback to center if anything is off
+                updateTracker(activeCell.center.lat, activeCell.center.lng, activeMode);
+            }
         }
 
         function updateTracker(lat, lng, mode) {
@@ -1078,7 +1084,7 @@
             const clickLat = e.latlng.lat;
             const clickLng = e.latlng.lng;
 
-            // Visual feedback
+            // Visual click blip
             const clickMarker = L.circleMarker([clickLat, clickLng], {
                 radius: 5,
                 fillColor: '#ff0000',
@@ -1088,7 +1094,15 @@
             }).addTo(map);
             setTimeout(() => map.removeLayer(clickMarker), 500);
 
-            // Show a quick status
+            // Optimistic marker at clicked location
+            cellData.manual = {
+                center: { lat: clickLat, lng: clickLng },
+                speed: 0,
+                direction: 0,
+                intensity: null
+            };
+            updateTracker(clickLat, clickLng, 'manual');
+
             const indicator = document.getElementById('mode-indicator');
             indicator.textContent = 'Analyzing motion...';
 
@@ -1102,7 +1116,6 @@
                 if (!resp.ok) throw new Error(`manual_selection failed: ${resp.status}`);
                 const result = await resp.json();
 
-                // Expecting: { center: {lat, lng}, speed, direction, intensity? }
                 cellData.manual = {
                     center: { lat: result.center.lat, lng: result.center.lng },
                     speed: Number(result.speed) || 0,
@@ -1110,7 +1123,6 @@
                     intensity: result.intensity ?? null
                 };
 
-                // Update tracker positions and draw
                 initializeTrackerPositions();
                 updateTrackerForFrame(animationPosition);
                 updateDataDisplay(cellData.manual);
