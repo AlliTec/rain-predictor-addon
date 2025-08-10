@@ -20,7 +20,7 @@ ZOOM = 8
 COLOR_SCHEME = 3            # matches your UI default, adjust if needed
 LAT_RANGE_DEG = 1.80        # must match predictor’s analysis_settings.lat_range_deg
 LON_RANGE_DEG = 1.99        # must match predictor’s analysis_settings.lon_range_deg
-RAIN_THRESHOLD = 60         # grayscale threshold (0–255) for "rain" pixels
+RAIN_THRESHOLD = 75         # grayscale threshold (0–255) for "rain" pixels
 MAX_FRAMES = 5              # how many past frames to use (recent frames are more relevant)
 
 class HomeAssistantAPI:

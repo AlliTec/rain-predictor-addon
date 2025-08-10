@@ -723,9 +723,10 @@
                 const distance = activeCell.speed * timeDiff; // km traveled
                 
                 // Convert to lat/lng offset
-                const latOffset = (distance * Math.cos((activeCell.direction - 90) * Math.PI / 180)) / 111;
-                const lngOffset = (distance * Math.sin((activeCell.direction - 90) * Math.PI / 180)) / (111 * Math.cos(activeCell.center.lat * Math.PI / 180));
-                
+                const theta = activeCell.direction * Math.PI / 180; // 0°=N, 90°=E
+                const latOffset = (distance * Math.cos(theta)) / 111;
+                const lngOffset = (distance * Math.sin(theta)) / (111 * Math.cos(activeCell.center.lat * Math.PI / 180));
+
                 trackerPositions.push({
                     lat: activeCell.center.lat + latOffset,
                     lng: activeCell.center.lng + lngOffset
@@ -771,10 +772,10 @@
             const distance = activeCell.speed * timeDiffHours; // km
             
             // Calculate new position
-            const directionRad = (activeCell.direction - 90) * Math.PI / 180;
-            const latOffset = (distance * Math.cos(directionRad)) / 111;
-            const lngOffset = (distance * Math.sin(directionRad)) / (111 * Math.cos(activeCell.center.lat * Math.PI / 180));
-            
+            const theta = activeCell.direction * Math.PI / 180; // 0°=N, 90°=E
+            const latOffset = (distance * Math.cos(theta)) / 111;
+            const lngOffset = (distance * Math.sin(theta)) / (111 * Math.cos(activeCell.center.lat * Math.PI / 180));
+
             const newLat = activeCell.center.lat + latOffset;
             const newLng = activeCell.center.lng + lngOffset;
             
@@ -857,11 +858,10 @@
             if (!cellInfo || !cellInfo.direction) return null;
             
             const arrowLength = 0.01; // Length of arrow in degrees
-            const directionRad = (cellInfo.direction - 90) * Math.PI / 180;
-            
-            const endLat = lat + Math.cos(directionRad) * arrowLength;
-            const endLng = lng + Math.sin(directionRad) * arrowLength;
-            
+            const theta = cellInfo.direction * Math.PI / 180; // 0°=N, 90°=E
+            const endLat = lat + Math.cos(theta) * arrowLength;
+            const endLng = lng + Math.sin(theta) * arrowLength;
+
             const arrow = L.polyline([[lat, lng], [endLat, endLng]], {
                 color: '#ffffff',
                 weight: 3,
@@ -875,11 +875,10 @@
             if (!arrow || !cellInfo || !cellInfo.direction) return;
             
             const arrowLength = 0.01;
-            const directionRad = (cellInfo.direction - 90) * Math.PI / 180;
-            
-            const endLat = lat + Math.cos(directionRad) * arrowLength;
-            const endLng = lng + Math.sin(directionRad) * arrowLength;
-            
+            const theta = cellInfo.direction * Math.PI / 180; // 0°=N, 90°=E
+            const endLat = lat + Math.cos(theta) * arrowLength;
+            const endLng = lng + Math.sin(theta) * arrowLength;
+
             arrow.setLatLngs([[lat, lng], [endLat, endLng]]);
         }
 
@@ -1075,10 +1074,10 @@
 
         async function handleManualClick(e) {
             if (!manualMode) return;
-            
+
             const clickLat = e.latlng.lat;
             const clickLng = e.latlng.lng;
-            
+
             // Visual feedback
             const clickMarker = L.circleMarker([clickLat, clickLng], {
                 radius: 5,
@@ -1087,29 +1086,40 @@
                 color: 'white',
                 weight: 2
             }).addTo(map);
-            
             setTimeout(() => map.removeLayer(clickMarker), 500);
-            
-            // Create manual cell data
-            cellData.manual = {
-                center: { lat: clickLat, lng: clickLng },
-                speed: 25 + Math.random() * 20, // 25-45 km/h
-                direction: Math.random() * 360,
-                intensity: Math.random() * 100
-            };
-            
-            // Update tracker positions for all frames
-            initializeTrackerPositions();
-            
-            // Create tracker at current frame position
-            updateTrackerForFrame(animationPosition);
-            
-            // Update display
-            updateDataDisplay(cellData.manual);
-            
-            // Update indicator
+
+            // Show a quick status
             const indicator = document.getElementById('mode-indicator');
-            indicator.textContent = 'Tracking selected rain cell';
+            indicator.textContent = 'Analyzing motion...';
+
+            try {
+                const resp = await fetch(apiManualSelectionUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitude: clickLat, longitude: clickLng })
+                });
+
+                if (!resp.ok) throw new Error(`manual_selection failed: ${resp.status}`);
+                const result = await resp.json();
+
+                // Expecting: { center: {lat, lng}, speed, direction, intensity? }
+                cellData.manual = {
+                    center: { lat: result.center.lat, lng: result.center.lng },
+                    speed: Number(result.speed) || 0,
+                    direction: Number(result.direction) || 0,
+                    intensity: result.intensity ?? null
+                };
+
+                // Update tracker positions and draw
+                initializeTrackerPositions();
+                updateTrackerForFrame(animationPosition);
+                updateDataDisplay(cellData.manual);
+
+                indicator.textContent = 'Tracking selected rain cell';
+            } catch (err) {
+                console.error(err);
+                indicator.textContent = 'Tracking failed. Click again on a rainy area.';
+            }
         }
 
         async function saveLocation() {
