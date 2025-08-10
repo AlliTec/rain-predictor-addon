@@ -1113,14 +1113,22 @@
                     body: JSON.stringify({ latitude: clickLat, longitude: clickLng })
                 });
 
-                if (!resp.ok) throw new Error(`manual_selection failed: ${resp.status}`);
-                const result = await resp.json();
+                const text = await resp.text(); // Read raw first for better error logs
+                let result = null;
+                try { result = JSON.parse(text); } catch {}
 
+                if (!resp.ok) {
+                    console.error('manual_selection failed:', resp.status, text);
+                    throw new Error(`manual_selection failed: ${resp.status}`);
+                }
+
+                // Expecting: { center: {lat, lng}, speed, direction, intensity? }
+                const center = result?.center || { lat: clickLat, lng: clickLng };
                 cellData.manual = {
-                    center: { lat: result.center.lat, lng: result.center.lng },
-                    speed: Number(result.speed) || 0,
-                    direction: Number(result.direction) || 0,
-                    intensity: result.intensity ?? null
+                    center,
+                    speed: Number(result?.speed) || 0,
+                    direction: Number(result?.direction) || 0,
+                    intensity: result?.intensity ?? null
                 };
 
                 initializeTrackerPositions();
@@ -1129,7 +1137,7 @@
 
                 indicator.textContent = 'Tracking selected rain cell';
             } catch (err) {
-                console.error(err);
+                console.error('Manual tracking error:', err);
                 indicator.textContent = 'Tracking failed. Click again on a rainy area.';
             }
         }
