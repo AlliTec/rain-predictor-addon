@@ -1094,7 +1094,7 @@
             }).addTo(map);
             setTimeout(() => map.removeLayer(clickMarker), 500);
 
-            // Optimistic marker at clicked location
+            // Optimistic marker at clicked location so the user sees something immediately
             cellData.manual = {
                 center: { lat: clickLat, lng: clickLng },
                 speed: 0,
@@ -1107,30 +1107,45 @@
             indicator.textContent = 'Analyzing motion...';
 
             try {
+                const b = map.getBounds();
+                const payload = {
+                    latitude: clickLat,
+                    longitude: clickLng,
+                    bounds: {
+                        north: b.getNorth(),
+                        south: b.getSouth(),
+                        east: b.getEast(),
+                        west: b.getWest()
+                    },
+                    zoom: map.getZoom()
+                };
+
                 const resp = await fetch(apiManualSelectionUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ latitude: clickLat, longitude: clickLng })
+                    body: JSON.stringify(payload)
                 });
 
-                const text = await resp.text(); // Read raw first for better error logs
+                // Read raw first for better error logs
+                const raw = await resp.text();
                 let result = null;
-                try { result = JSON.parse(text); } catch {}
+                try { result = JSON.parse(raw); } catch {}
 
                 if (!resp.ok) {
-                    console.error('manual_selection failed:', resp.status, text);
+                    console.error('manual_selection failed:', resp.status, raw);
                     throw new Error(`manual_selection failed: ${resp.status}`);
                 }
 
                 // Expecting: { center: {lat, lng}, speed, direction, intensity? }
                 const center = result?.center || { lat: clickLat, lng: clickLng };
                 cellData.manual = {
-                    center,
+                    center: { lat: Number(center.lat), lng: Number(center.lng) },
                     speed: Number(result?.speed) || 0,
                     direction: Number(result?.direction) || 0,
                     intensity: result?.intensity ?? null
                 };
 
+                // Update tracker positions synchronized with radar frames
                 initializeTrackerPositions();
                 updateTrackerForFrame(animationPosition);
                 updateDataDisplay(cellData.manual);
