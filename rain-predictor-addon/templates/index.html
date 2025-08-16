@@ -806,6 +806,12 @@
                 if (trackerMarkers[trackerKey + 'Arrow']) {
                     updateTrackerArrow(trackerMarkers[trackerKey + 'Arrow'], lat, lng, cellData[mode]);
                 }
+
+                // Update prediction line if exists
+                if (trackerMarkers[trackerKey + 'PredictionLine']) {
+                    const newPath = calculatePredictionPath(lat, lng, cellData[mode]);
+                    trackerMarkers[trackerKey + 'PredictionLine'].setLatLngs(newPath);
+                }
             } else {
                 // Create new tracker
                 createTracker(lat, lng, mode);
@@ -850,6 +856,17 @@
                 if (arrow) {
                     trackerMarkers[trackerKey + 'Arrow'] = arrow;
                 }
+
+                // Add prediction line
+                const predictionPath = calculatePredictionPath(lat, lng, cellData[mode]);
+                const predictionLine = L.polyline(predictionPath, {
+                    color: color,
+                    weight: 3,
+                    opacity: 0.7,
+                    dashArray: '5, 10'
+                }).addTo(map);
+                trackerMarkers[trackerKey + 'PredictionLine'] = predictionLine;
+
             }
             
             // Add label
@@ -891,7 +908,7 @@
         function removeTracker(mode) {
             const trackerKey = mode + 'Tracker';
             
-            ['', 'Pulse', 'Arrow'].forEach(suffix => {
+            ['', 'Pulse', 'Arrow', 'PredictionLine'].forEach(suffix => {
                 const key = trackerKey + suffix;
                 if (trackerMarkers[key]) {
                     map.removeLayer(trackerMarkers[key]);
@@ -1160,6 +1177,32 @@
                 saveBtn.textContent = 'Error';
                 saveBtn.disabled = false;
             }
+        }
+
+        function calculatePredictionPath(startLat, startLng, cellInfo, durationMinutes = 60, steps = 4) {
+            if (!cellInfo || typeof cellInfo.speed !== 'number' || typeof cellInfo.direction !== 'number' || cellInfo.speed <= 0) {
+                return [];
+            }
+
+            const path = [L.latLng(startLat, startLng)];
+            const theta = cellInfo.direction * Math.PI / 180; // Radians from North, 0°=N, 90°=E
+
+            for (let i = 1; i <= steps; i++) {
+                const minutes = (durationMinutes / steps) * i;
+                const timeDiffHours = minutes / 60;
+                const distance = cellInfo.speed * timeDiffHours; // km
+
+                const latOffset = (distance * Math.cos(theta)) / 111;
+                const lngOffset = (distance * Math.sin(theta)) / (111 * Math.cos(startLat * Math.PI / 180));
+
+                const futureLat = startLat + latOffset;
+                const futureLng = startLng + lngOffset;
+                
+                if (Number.isFinite(futureLat) && Number.isFinite(futureLng)) {
+                    path.push(L.latLng(futureLat, futureLng));
+                }
+            }
+            return path;
         }
 
         function calculateBearing(from, to) {
