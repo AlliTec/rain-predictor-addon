@@ -853,8 +853,8 @@
             }
             
             // Add label
-            trackerMarkers[trackerKey].bindTooltip(mode === 'manual' ? 'Manual Track' : 'Auto Track', {
-                permanent: false,
+            trackerMarkers[trackerKey].bindTooltip(mode === 'manual' ? 'Manual Point' : 'Auto Track', {
+                permanent: mode === 'auto',
                 direction: 'top',
                 offset: [0, -20]
             });
@@ -1038,7 +1038,7 @@
                 btn.classList.add('active');
                 indicator.classList.add('manual-mode');
                 indicator.style.display = 'block';
-                indicator.textContent = 'Click on the map where you see rain';
+                indicator.textContent = 'Click on the map to track a point';
                 
                 // Remove auto tracker
                 removeTracker('auto');
@@ -1046,7 +1046,7 @@
                 // Show instruction overlay
                 const instruction = document.createElement('div');
                 instruction.className = 'click-instruction';
-                instruction.textContent = 'Click anywhere on the radar image to track rain';
+                instruction.textContent = 'Click anywhere on the map to track a point';
                 document.body.appendChild(instruction);
                 setTimeout(() => instruction.remove(), 3000);
                 
@@ -1083,6 +1083,7 @@
 
             const clickLat = e.latlng.lat;
             const clickLng = e.latlng.lng;
+            const indicator = document.getElementById('mode-indicator');
 
             // Visual click blip
             const clickMarker = L.circleMarker([clickLat, clickLng], {
@@ -1094,67 +1095,32 @@
             }).addTo(map);
             setTimeout(() => map.removeLayer(clickMarker), 500);
 
-            // Optimistic marker at clicked location so the user sees something immediately
+            // Check if we have data for average speed/direction from the auto-tracked cell.
+            // This data is populated by the regular fetchAndUpdateData calls in auto mode.
+            if (!cellData.auto || typeof cellData.auto.speed !== 'number' || typeof cellData.auto.direction !== 'number') {
+                console.error('Cannot perform manual track: auto-tracking data (speed/direction) is not available.');
+                indicator.textContent = 'No storm data available. Exit and wait for auto-track.';
+                
+                // We can't proceed, so we just show a message. The user can click again or exit manual mode.
+                return;
+            }
+
+            indicator.textContent = 'Calculating track...';
+
+            // Use the clicked location as the center, and the auto-tracked cell's speed and direction.
             cellData.manual = {
                 center: { lat: clickLat, lng: clickLng },
-                speed: 0,
-                direction: 0,
-                intensity: null
+                speed: cellData.auto.speed,
+                direction: cellData.auto.direction,
+                intensity: null // Not relevant for this type of manual tracking
             };
-            updateTracker(clickLat, clickLng, 'manual');
 
-            const indicator = document.getElementById('mode-indicator');
-            indicator.textContent = 'Analyzing motion...';
+            // Update tracker positions synchronized with radar frames
+            initializeTrackerPositions();
+            updateTrackerForFrame(animationPosition);
+            updateDataDisplay(cellData.manual);
 
-            try {
-                const b = map.getBounds();
-                const payload = {
-                    latitude: clickLat,
-                    longitude: clickLng,
-                    bounds: {
-                        north: b.getNorth(),
-                        south: b.getSouth(),
-                        east: b.getEast(),
-                        west: b.getWest()
-                    },
-                    zoom: map.getZoom()
-                };
-
-                const resp = await fetch(apiManualSelectionUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                // Read raw first for better error logs
-                const raw = await resp.text();
-                let result = null;
-                try { result = JSON.parse(raw); } catch {}
-
-                if (!resp.ok) {
-                    console.error('manual_selection failed:', resp.status, raw);
-                    throw new Error(`manual_selection failed: ${resp.status}`);
-                }
-
-                // Expecting: { center: {lat, lng}, speed, direction, intensity? }
-                const center = result?.center || { lat: clickLat, lng: clickLng };
-                cellData.manual = {
-                    center: { lat: Number(center.lat), lng: Number(center.lng) },
-                    speed: Number(result?.speed) || 0,
-                    direction: Number(result?.direction) || 0,
-                    intensity: result?.intensity ?? null
-                };
-
-                // Update tracker positions synchronized with radar frames
-                initializeTrackerPositions();
-                updateTrackerForFrame(animationPosition);
-                updateDataDisplay(cellData.manual);
-
-                indicator.textContent = 'Tracking selected rain cell';
-            } catch (err) {
-                console.error('Manual tracking error:', err);
-                indicator.textContent = 'Tracking failed. Click again on a rainy area.';
-            }
+            indicator.textContent = 'Tracking selected point';
         }
 
         async function saveLocation() {
