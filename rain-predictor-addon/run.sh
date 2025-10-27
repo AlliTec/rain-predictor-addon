@@ -1,41 +1,38 @@
-#!/usr/bin/with-contenv bash
-
-# Import Bashio
-source /usr/lib/bashio/bashio.sh
-
-# Set log level
-LOG_LEVEL=$(bashio::config 'debug.log_level' 'INFO')
-export LOG_LEVEL
+#!/usr/bin/with-contenv bashio
 
 bashio::log.info "Starting Rain Predictor Addon..."
 
-# Check if Home Assistant is available
-if bashio::supervisor.ping; then
-    bashio::log.info "Home Assistant supervisor is available"
-else
-    bashio::log.warning "Home Assistant supervisor not available, some features may not work"
-fi
+# Create necessary directories
+mkdir -p /share/rain_predictor_debug
 
-# Validate required configuration
-if ! bashio::config.exists 'latitude' || ! bashio::config.exists 'longitude'; then
-    bashio::log.fatal "Latitude and longitude must be configured!"
-    exit 1
-fi
-
-if ! bashio::config.exists 'entities.time'; then
-    bashio::log.fatal "At least the time entity must be configured!"
-    exit 1
-fi
-
-# Start the web UI in background
+# Start web server in background
 bashio::log.info "Starting web UI on port 8099..."
-python3 /web_ui.py &
-WEB_UI_PID=$!
+python3 /app/webserver.py &
+WEBSERVER_PID=$!
 
-# Start the main rain predictor
-bashio::log.info "Starting rain predictor service..."
-python3 /rain_predictor.py
+# Give web server time to start
+sleep 2
 
-# If main process exits, kill web UI
+# Start main rain predictor
+bashio::log.info "Starting rain prediction service..."
+python3 /app/rain_predictor.py &
+MAIN_PID=$!
 
-kill $WEB_UI_PID 2>/dev/null || true
+# Function to handle shutdown
+cleanup() {
+    bashio::log.info "Shutting down services..."
+    kill $WEBSERVER_PID $MAIN_PID 2>/dev/null
+    wait $WEBSERVER_PID $MAIN_PID 2>/dev/null
+    bashio::log.info "Shutdown complete"
+}
+
+# Trap signals
+trap cleanup SIGTERM SIGINT
+
+# Wait for either process to exit
+wait -n
+
+# If one exits, clean up the other
+cleanup
+
+exit $?
