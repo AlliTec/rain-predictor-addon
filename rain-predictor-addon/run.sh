@@ -13,9 +13,11 @@ WEBSERVER_PID=$!
 # Give web server time to start
 sleep 2
 
-# Start main rain predictor
+# Start main rain predictor with error output
 bashio::log.info "Starting rain prediction service..."
-python3 /app/rain_predictor.py &
+python3 /app/rain_predictor.py 2>&1 | while read line; do
+    bashio::log.info "$line"
+done &
 MAIN_PID=$!
 
 # Function to handle shutdown
