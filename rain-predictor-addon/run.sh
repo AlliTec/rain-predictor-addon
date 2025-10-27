@@ -7,7 +7,7 @@ mkdir -p /share/rain_predictor_debug
 
 # Start web server in background
 bashio::log.info "Starting web UI on port 8099..."
-python3 /app/webserver.py &
+python3 /app/web_ui.py &
 WEBSERVER_PID=$!
 
 # Give web server time to start
