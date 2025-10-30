@@ -149,6 +149,7 @@ class RainPredictor:
     """Main rain prediction logic"""
     
     def __init__(self, config, ha_api):
+        logging.info(f"Loaded config: {config}")
         self.config = config
         self.ha_api = ha_api
         self.running = False
