@@ -611,6 +611,7 @@ class RainPredictor:
 
     def _update_entities(self, values):
         """Update Home Assistant entities with prediction values"""
+        logging.info(f"Entities time value in _update_entities: {self.entities['time']}")
         if not self.entities['time']:
             logging.warning("No time entity configured, skipping entity updates")
             return
