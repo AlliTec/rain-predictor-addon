@@ -21,21 +21,23 @@ VERSION = "1.1.0-debug"
 
 class AddonConfig:
     """Load and manage addon configuration"""
-    
+
     def __init__(self):
+        self.data_path = os.environ.get("DATA_PATH", "/data")
+        self.options_path = os.path.join(self.data_path, "options.json")
         self.config = self._load_config()
         self._validate_config()
-    
+
     def _load_config(self):
         """Load configuration from addon options"""
         try:
-            with open('/data/options.json', 'r') as f:
+            with open(self.options_path, 'r') as f:
                 return json.load(f)
         except FileNotFoundError:
-            logging.warning("Configuration file not found, using defaults.")
+            logging.warning(f"Configuration file not found at {self.options_path}, using defaults.")
             return {}
         except json.JSONDecodeError as e:
-            logging.error(f"Invalid configuration JSON: {e}")
+            logging.error(f"Invalid configuration JSON at {self.options_path}: {e}")
             return {}
     
     def _validate_config(self):
@@ -187,6 +189,10 @@ class RainPredictor:
         self.lat_range = config.get('analysis_settings.lat_range_deg', 1.80)
         self.lon_range = config.get('analysis_settings.lon_range_deg', 1.99)
         self.arrival_angle_threshold = config.get('analysis_settings.arrival_angle_threshold_deg', 45)
+
+        # Debug settings
+        self.debug_dir = config.get('debug.debug_dir', '/share/rain_predictor_debug')
+        self.save_debug_images = config.get('debug.save_images', False)
         
         # Tracking settings
         self.max_track_dist = config.get('tracking_settings.max_tracking_distance_km', 30)
@@ -269,20 +275,23 @@ class RainPredictor:
     
     def _save_debug_image(self, data, url):
         """Save downloaded image for debugging with annotations"""
+        if not self.save_debug_images:
+            return
+
         try:
-            os.makedirs('/share/rain_predictor_debug', exist_ok=True)
+            os.makedirs(self.debug_dir, exist_ok=True)
             timestamp = int(time.time())
-            
+
             # Save original
             filename = f"radar_{timestamp}.png"
-            filepath = f"/share/rain_predictor_debug/{filename}"
+            filepath = os.path.join(self.debug_dir, filename)
             with open(filepath, 'wb') as f:
                 f.write(data)
-            
+
             # Create annotated version
             img = Image.open(io.BytesIO(data)).convert('RGB')
             draw = ImageDraw.Draw(img)
-            
+
             # Draw center crosshair (your location)
             center_x = img.width // 2
             center_y = img.height // 2
@@ -290,10 +299,10 @@ class RainPredictor:
             draw.line([(center_x - size, center_y), (center_x + size, center_y)], fill='red', width=3)
             draw.line([(center_x, center_y - size), (center_x, center_y + size)], fill='red', width=3)
             draw.ellipse([center_x-15, center_y-15, center_x+15, center_y+15], outline='red', width=2)
-            
-            annotated_path = f"/share/rain_predictor_debug/annotated_{timestamp}.png"
+
+            annotated_path = os.path.join(self.debug_dir, f"annotated_{timestamp}.png")
             img.save(annotated_path)
-            
+
             logging.debug(f"Debug images saved: {filepath}, {annotated_path}")
         except Exception as e:
             logging.error(f"Error saving debug image: {e}")
@@ -559,6 +568,83 @@ class RainPredictor:
         
         logging.debug(f"Track update: {matched_count} matched, {len(unmatched_cells)} new, {removed_count} removed")
     
+    def _validate_api_response(self, api_data):
+        """Validate that API response has required structure"""
+        try:
+            if not isinstance(api_data, dict):
+                logging.error("API response is not a dictionary")
+                return False
+
+            if 'radar' not in api_data:
+                logging.error("API response missing 'radar' key")
+                return False
+
+            radar_data = api_data['radar']
+            if not isinstance(radar_data, dict):
+                logging.error("'radar' data is not a dictionary")
+                return False
+
+            if 'past' not in radar_data:
+                logging.error("'radar' data missing 'past' key")
+                return False
+
+            past_frames = radar_data['past']
+            if not isinstance(past_frames, list) or len(past_frames) == 0:
+                logging.warning("No past radar frames available")
+                return False
+
+            # Check that frames have required fields
+            for frame in past_frames[:1]:  # Just check the first frame
+                if not isinstance(frame, dict):
+                    logging.error("Frame data is not a dictionary")
+                    return False
+                if 'path' not in frame:
+                    logging.error("Frame missing 'path' field")
+                    return False
+
+            return True
+
+        except Exception as e:
+            logging.error(f"Error validating API response: {e}")
+            return False
+
+    def _update_entities(self, values):
+        """Update Home Assistant entities with prediction values"""
+        if not self.entities['time']:
+            logging.warning("No time entity configured, skipping entity updates")
+            return
+
+        try:
+            # Update time to rain
+            if self.entities['time']:
+                self.ha_api.call_service("input_number/set_value",
+                                       self.entities['time'], values['time'])
+
+            # Update distance
+            if self.entities.get('distance'):
+                self.ha_api.call_service("input_number/set_value",
+                                       self.entities['distance'], values['distance'])
+
+            # Update speed
+            if self.entities.get('speed'):
+                self.ha_api.call_service("input_number/set_value",
+                                       self.entities['speed'], values['speed'])
+
+            # Update direction
+            if self.entities.get('direction'):
+                self.ha_api.call_service("input_number/set_value",
+                                       self.entities['direction'], values['direction'])
+
+            # Update bearing
+            if self.entities.get('bearing'):
+                self.ha_api.call_service("input_number/set_value",
+                                       self.entities['bearing'], values['bearing'])
+
+            logging.info("Successfully updated Home Assistant entities")
+
+        except Exception as e:
+            logging.error(f"Error updating entities: {e}")
+
     def _find_threatening_cell(self):
         """Find cell most likely to reach location"""
         best_prediction = None
@@ -678,3 +764,54 @@ class RainPredictor:
         logging.info(f"  Direction: {values['direction']}°")
         logging.info(f"  Bearing: {values['bearing']}°")
         logging.info("=" * 60 + "\n")
+
+    def run(self):
+        """Main execution loop"""
+        logging.info("Starting Rain Predictor main loop")
+        self.running = True
+
+        # Initial prediction
+        self.run_prediction()
+
+        try:
+            while self.running:
+                # Wait for next interval
+                time.sleep(self.run_interval)
+
+                # Run prediction cycle
+                self.run_prediction()
+
+        except KeyboardInterrupt:
+            logging.info("Received interrupt signal, shutting down...")
+        except Exception as e:
+            logging.error(f"Unexpected error in main loop: {e}", exc_info=True)
+        finally:
+            self.running = False
+            logging.info("Rain Predictor stopped")
+
+
+def main():
+    """Main entry point"""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+
+    try:
+        # Load configuration
+        config = AddonConfig()
+
+        # Create Home Assistant API client
+        ha_api = HomeAssistantAPI()
+
+        # Create and start rain predictor
+        predictor = RainPredictor(config.config, ha_api)
+        predictor.run()
+
+    except Exception as e:
+        logging.error(f"Failed to start Rain Predictor: {e}", exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

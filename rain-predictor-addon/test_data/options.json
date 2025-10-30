@@ -1,0 +1,39 @@
+{
+  "latitude": -24.981262201681634,
+  "longitude": 151.86545522467864,
+  "run_interval_minutes": 3,
+  "api_url": "https://api.rainviewer.com/public/weather-maps.json",
+  "entities": {
+    "time": "input_number.rain_arrival_minutes",
+    "distance": "input_number.rain_prediction_distance",
+    "speed": "input_number.rain_prediction_speed",
+    "direction": "input_number.rain_cell_direction",
+    "bearing": "input_number.bearing_to_rain_cell"
+  },
+  "defaults": {
+    "no_rain_value": 999,
+    "no_direction_value": -1,
+    "no_bearing_value": -1
+  },
+  "image_settings": {
+    "size": 256,
+    "zoom": 8,
+    "color_scheme": 3,
+    "options": "0_0"
+  },
+  "analysis_settings": {
+    "rain_threshold": 50,
+    "lat_range_deg": 2.5,
+    "lon_range_deg": 2.5,
+    "arrival_angle_threshold_deg": 90
+  },
+  "tracking_settings": {
+    "max_tracking_distance_km": 50,
+    "min_track_length": 2
+  },
+  "debug": {
+    "log_level": "DEBUG",
+    "save_images": true,
+    "debug_dir": "./debug_images"
+  }
+}
