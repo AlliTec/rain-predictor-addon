@@ -32,23 +32,21 @@ class AddonConfig:
             with open('/data/options.json', 'r') as f:
                 return json.load(f)
         except FileNotFoundError:
-            logging.error("Configuration file not found!")
-            sys.exit(1)
+            logging.warning("Configuration file not found, using defaults.")
+            return {}
         except json.JSONDecodeError as e:
             logging.error(f"Invalid configuration JSON: {e}")
-            sys.exit(1)
+            return {}
     
     def _validate_config(self):
         """Validate required configuration options"""
         required = ['latitude', 'longitude', 'entities']
         for key in required:
             if key not in self.config:
-                logging.error(f"Missing required configuration: {key}")
-                sys.exit(1)
+                logging.warning(f"Missing required configuration: {key}")
         
-        if 'time' not in self.config['entities']:
-            logging.error("Time entity must be configured")
-            sys.exit(1)
+        if 'time' not in self.config.get('entities', {}):
+            logging.warning("Time entity must be configured")
     
     def get(self, key, default=None):
         """Get configuration value with dot notation support"""
@@ -157,10 +155,10 @@ class RainPredictor:
         self._setup_logging()
         
         # Extract configuration values
-        self.latitude = config.get('latitude')
-        self.longitude = config.get('longitude')
+        self.latitude = config.get('latitude', -24.98)
+        self.longitude = config.get('longitude', 151.86)
         self.run_interval = config.get('run_interval_minutes', 3) * 60
-        self.api_url = config.get('api_url')
+        self.api_url = config.get('api_url', 'https://api.rainviewer.com/public/weather-maps.json')
         
         # Entity IDs
         self.entities = {
