@@ -160,25 +160,24 @@ class RainPredictor:
         self.ha_api = ha_api
         self.running = False
         self.tracked_cells = {}
-        self.next_cell_id = 1
-        # Extract configuration values
-        self.latitude = config.get('latitude', -24.98)
-        self.longitude = config.get('longitude', 151.86)
-        self.run_interval = config.get('run_interval_minutes', 3) * 60
-        self.api_url = config.get('api_url', 'https://api.rainviewer.com/public/weather-maps.json')
-
-        # Entity IDs
-        self.entities = {
-            'time': config.get('entities.time'),
-            'distance': config.get('entities.distance'),
-            'speed': config.get('entities.speed'),
-            'direction': config.get('entities.direction'),
-            'bearing': config.get('entities.bearing')
-        }
-
-        self._setup_logging()        
-        # Default values
-        self.defaults = {
+                self.next_cell_id = 1
+                # Extract configuration values
+                self.latitude = config.get('latitude', -24.98)
+                self.longitude = config.get('longitude', 151.86)
+                self.run_interval = config.get('run_interval_minutes', 3) * 60
+                self.api_url = config.get('api_url', 'https://api.rainviewer.com/public/weather-maps.json')
+        
+                # Entity IDs
+                self.entities = {
+                    'time': config.get('entities.time'),
+                    'distance': config.get('entities.distance'),
+                    'speed': config.get('entities.speed'),
+                    'direction': config.get('entities.direction'),
+                    'bearing': config.get('entities.bearing')
+                }
+        
+                self._setup_logging()        
+                # Default values        self.defaults = {
             'no_rain': config.get('defaults.no_rain_value', 999),
             'no_direction': config.get('defaults.no_direction_value', -1),
             'no_bearing': config.get('defaults.no_bearing_value', -1)
