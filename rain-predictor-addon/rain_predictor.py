@@ -52,13 +52,19 @@ class AddonConfig:
     
     def get(self, key, default=None):
         """Get configuration value with dot notation support"""
+        logging.info(f"AddonConfig.get called with key: {key}, default: {default}")
         keys = key.split('.')
         value = self.config
+        logging.info(f"  Initial value: {value}")
         try:
             for k in keys:
+                logging.info(f"  Accessing key part: {k}")
                 value = value[k]
+                logging.info(f"  Current value: {value}")
+            logging.info(f"  Returning value: {value}")
             return value
-        except (KeyError, TypeError):
+        except (KeyError, TypeError) as e:
+            logging.info(f"  Key not found or TypeError: {e}. Returning default: {default}")
             return default
 
 class HomeAssistantAPI:
