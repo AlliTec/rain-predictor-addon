@@ -11,7 +11,7 @@ export SUPERVISOR_TOKEN="dummy_token_for_testing"
 
 # Start web server in background
 echo "Starting web UI on port 8099..."
-python3 web_ui.py &
+python3 web_ui.py > web_ui.log 2>&1 &
 WEBSERVER_PID=$!
 
 # Give web server time to start
@@ -19,7 +19,7 @@ sleep 2
 
 # Start main rain predictor with error output
 echo "Starting rain prediction service..."
-python3 rain_predictor.py &
+python3 rain_predictor.py > rain_predictor.log 2>&1 &
 MAIN_PID=$!
 
 # Function to handle shutdown
