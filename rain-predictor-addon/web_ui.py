@@ -69,9 +69,11 @@ class HomeAssistantAPI:
         url = f"http://supervisor/core/api/states/{entity_id}"
         try:
             r = requests.get(url, headers=headers, timeout=5)
+            logging.info(f"get_state response for {entity_id}: {r.status_code} {r.text}")
             r.raise_for_status()
             return r.json().get("state", default)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error getting state for {entity_id}: {e}")
             return default
 
 ha_api = HomeAssistantAPI()

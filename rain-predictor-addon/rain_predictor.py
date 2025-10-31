@@ -87,6 +87,7 @@ class HomeAssistantAPI:
         
         try:
             response = self.session.post(url, json=data, timeout=10)
+            logging.info(f"call_service response: {response.status_code} {response.text}")
             response.raise_for_status()
             logging.debug(f"Successfully called {service} for {entity_id} with value {value}")
             return True
