@@ -77,7 +77,7 @@ class HomeAssistantAPI:
 ha_api = HomeAssistantAPI()
 
 def get_all_data():
-    return {
+    data = {
         "time_to_rain": ha_api.get_state("input_number.rain_arrival_minutes", "--"),
         "distance": ha_api.get_state("input_number.rain_prediction_distance", "--"),
         "speed": ha_api.get_state("input_number.rain_prediction_speed", "--"),
@@ -86,6 +86,25 @@ def get_all_data():
         "latitude": ha_api.get_state("input_number.rain_prediction_latitude", -24.98),
         "longitude": ha_api.get_state("input_number.rain_prediction_longitude", 151.86),
     }
+
+    # Fallback for local development
+    if data["time_to_rain"] == "--":
+        try:
+            data_path = os.environ.get("DATA_PATH", "/data")
+            prediction_file = os.path.join(data_path, "prediction.json")
+            with open(prediction_file, 'r') as f:
+                prediction_data = json.load(f)
+            
+            data["time_to_rain"] = prediction_data.get("time", "--")
+            data["distance"] = prediction_data.get("distance", "--")
+            data["speed"] = prediction_data.get("speed", "--")
+            data["direction"] = prediction_data.get("direction", "N/A")
+            data["bearing"] = prediction_data.get("bearing", "N/A")
+            logging.debug("Loaded prediction data from file")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.debug(f"Could not load prediction data from file: {e}")
+            
+    return data
 
 # ========== Options.json persistence ==========
 def read_options_latlon(default_lat=-24.98, default_lng=151.86) -> Tuple[float, float]:
