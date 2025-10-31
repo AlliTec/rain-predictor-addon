@@ -432,7 +432,7 @@ class RainPredictor:
             
             logging.debug(f"Center area max intensity: {max_intensity} (threshold: {self.threshold})")
             
-            return np.any(center_area > self.threshold)
+            return np.mean(center_area) > self.threshold
             
         except Exception as e:
             logging.error(f"Error checking current rain: {e}", exc_info=True)
