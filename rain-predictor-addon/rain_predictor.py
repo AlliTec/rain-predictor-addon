@@ -732,9 +732,12 @@ class RainPredictor:
         
         try:
             logging.info(f"Fetching API data from: {self.api_url}")
+            logging.info("Making request...")
             response = requests.get(self.api_url, timeout=10)
+            logging.info(f"Request finished. Status code: {response.status_code}")
             response.raise_for_status()
             api_data = response.json()
+            logging.info("Successfully fetched and parsed API data.")
             
             logging.info(f"API response received. Host: {api_data.get('host', 'unknown')}")
             
