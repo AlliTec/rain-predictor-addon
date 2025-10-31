@@ -164,14 +164,14 @@ class RainPredictor:
         self.run_interval = config.get('run_interval_minutes', 3) * 60
         self.api_url = config.get('api_url', 'https://api.rainviewer.com/public/weather-maps.json')
         
-                # Entity IDs
-                self.entities = {
-                    'time': config.get('entities.time'),
-                    'distance': config.get('entities.distance'),
-                    'speed': config.get('entities.speed'),
-                    'direction': config.get('entities.direction'),
-                    'bearing': config.get('entities.bearing')
-                }
+        # Entity IDs
+        self.entities = {
+            'time': config.get('entities.time'),
+            'distance': config.get('entities.distance'),
+            'speed': config.get('entities.speed'),
+            'direction': config.get('entities.direction'),
+            'bearing': config.get('entities.bearing')
+        }
                 logging.debug(f"RainPredictor initialized with time entity: {self.entities['time']}")
         
                 self._setup_logging()        
