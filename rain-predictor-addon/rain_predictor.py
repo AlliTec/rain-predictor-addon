@@ -172,10 +172,11 @@ class RainPredictor:
             'direction': config.get('entities.direction'),
             'bearing': config.get('entities.bearing')
         }
-                logging.debug(f"RainPredictor initialized with time entity: {self.entities['time']}")
-        
-                self._setup_logging()        
-                # Default values        self.defaults = {
+        logging.debug(f"RainPredictor initialized with time entity: {self.entities['time']}")
+
+        self._setup_logging()
+        # Default values
+        self.defaults = {
             'no_rain': config.get('defaults.no_rain_value', 999),
             'no_direction': config.get('defaults.no_direction_value', -1),
             'no_bearing': config.get('defaults.no_bearing_value', -1)
