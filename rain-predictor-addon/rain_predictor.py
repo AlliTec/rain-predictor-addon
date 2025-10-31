@@ -810,7 +810,7 @@ def main():
         ha_api = HomeAssistantAPI()
 
         # Create and start rain predictor
-        predictor = RainPredictor(config.config, ha_api)
+        predictor = RainPredictor(config, ha_api)
         predictor.run()
 
     except Exception as e:
