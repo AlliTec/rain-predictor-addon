@@ -748,8 +748,10 @@
                     // Show next frame
                     radarLayers[animationPosition].setOpacity(0.6);
                     
-                    // Update tracker position synchronized with frame
-                    updateTrackerForFrame(animationPosition);
+                    // Update tracker position synchronized with frame (only for manual mode if needed, or remove entirely if auto is static)
+                    // updateTrackerForFrame should only handle radar layer opacity
+                    // The main auto tracker marker will be static at the current rain cell location
+                    // updateTrackerForFrame(animationPosition); // This line is removed/commented out
                     
                     updateTimeDisplay();
                 }
@@ -787,6 +789,60 @@
                 // Fallback to center if anything is off
                 updateTracker(activeCell.center.lat, activeCell.center.lng, activeMode);
             }
+        }
+
+        function updateAutoTrackerDisplay() {
+            if (!cellData.auto || !cellData.auto.center) return;
+
+            const lat = cellData.auto.center.lat;
+            const lng = cellData.auto.center.lng;
+            const mode = 'auto';
+            const color = '#48bb78';
+            const trackerKey = mode + 'Tracker';
+
+            // Remove old tracker if exists
+            removeTracker(mode);
+
+            // Create main tracker icon
+            const trackerIcon = L.divIcon({
+                className: `rain-tracker rain-tracker-${mode}`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+                html: `<div style="width: 100%; height: 100%; background: ${color}; border-radius: 50%; border: 3px solid white;"></div>`
+            });
+
+            trackerMarkers[trackerKey] = L.marker([lat, lng], {
+                icon: trackerIcon,
+                zIndexOffset: 1000
+            }).addTo(map);
+
+            // Add pulse effect
+            const pulseCircle = L.circle([lat, lng], {
+                radius: 1000,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.2,
+                weight: 2,
+                className: 'tracker-pulse'
+            }).addTo(map);
+
+            trackerMarkers[trackerKey + 'Pulse'] = pulseCircle;
+
+            // Add direction arrow
+            const arrow = createTrackerArrow(lat, lng, cellData[mode]);
+            if (arrow) {
+                trackerMarkers[trackerKey + 'Arrow'] = arrow;
+            }
+
+            // Add prediction line
+            const predictionPath = calculatePredictionPath(lat, lng, cellData[mode]);
+            const predictionLine = L.polyline(predictionPath, {
+                color: color,
+                weight: 3,
+                opacity: 0.7,
+                dashArray: '5, 10'
+            }).addTo(map);
+            trackerMarkers[trackerKey + 'PredictionLine'] = predictionLine;
         }
 
         function updateTracker(lat, lng, mode) {
@@ -869,11 +925,13 @@
             }
             
             // Add label
-            trackerMarkers[trackerKey].bindTooltip(mode === 'manual' ? 'Manual Point' : 'Auto Track', {
-                permanent: mode === 'auto',
-                direction: 'top',
-                offset: [0, -20]
-            });
+            if (mode === 'manual') {
+                trackerMarkers[trackerKey].bindTooltip('Manual Point', {
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -20]
+                });
+            }
         }
 
         function createTrackerArrow(lat, lng, cellInfo) {
@@ -1255,11 +1313,8 @@
                         center: { lat: parseFloat(data.latitude), lng: parseFloat(data.longitude) }
                     };
                     
-                    // Update tracker positions for all frames
-                    initializeTrackerPositions();
-                    
-                    // Update tracker for current frame
-                    updateTrackerForFrame(animationPosition);
+                    // Update auto tracker display
+                    updateAutoTrackerDisplay();
                     
                     updateDataDisplay(data);
                 } else {
@@ -1278,8 +1333,7 @@
                         ...simData,
                         center: { lat: simData.latitude, lng: simData.longitude }
                     };
-                    initializeTrackerPositions();
-                    updateTrackerForFrame(animationPosition);
+                    updateAutoTrackerDisplay();
                     updateDataDisplay(simData);
                 }
             } catch (error) {
@@ -1298,8 +1352,7 @@
                     ...simData,
                     center: { lat: simData.latitude, lng: simData.longitude }
                 };
-                initializeTrackerPositions();
-                updateTrackerForFrame(animationPosition);
+                updateAutoTrackerDisplay();
                 updateDataDisplay(simData);
             }
         }
