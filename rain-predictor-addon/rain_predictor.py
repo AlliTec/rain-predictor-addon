@@ -52,19 +52,16 @@ class AddonConfig:
     
     def get(self, key, default=None):
         """Get configuration value with dot notation support"""
-        logging.info(f"AddonConfig.get called with key: {key}, default: {default}")
+        logging.debug(f"AddonConfig.get called with key: {key}, default: {default}")
         keys = key.split('.')
         value = self.config
-        logging.info(f"  Initial value: {value}")
         try:
             for k in keys:
-                logging.info(f"  Accessing key part: {k}")
                 value = value[k]
-                logging.info(f"  Current value: {value}")
-            logging.info(f"  Returning value: {value}")
+            logging.debug(f"AddonConfig.get returning value for {key}: {value}")
             return value
-        except (KeyError, TypeError) as e:
-            logging.info(f"  Key not found or TypeError: {e}. Returning default: {default}")
+        except (KeyError, TypeError):
+            logging.debug(f"AddonConfig.get key not found for {key}. Returning default: {default}")
             return default
 
 class HomeAssistantAPI:
@@ -175,6 +172,7 @@ class RainPredictor:
                     'direction': config.get('entities.direction'),
                     'bearing': config.get('entities.bearing')
                 }
+                logging.debug(f"RainPredictor initialized with time entity: {self.entities['time']}")
         
                 self._setup_logging()        
                 # Default values        self.defaults = {
