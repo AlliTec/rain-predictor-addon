@@ -157,12 +157,12 @@ class RainPredictor:
         self.ha_api = ha_api
         self.running = False
         self.tracked_cells = {}
-                self.next_cell_id = 1
-                # Extract configuration values
-                self.latitude = config.get('latitude', -24.98)
-                self.longitude = config.get('longitude', 151.86)
-                self.run_interval = config.get('run_interval_minutes', 3) * 60
-                self.api_url = config.get('api_url', 'https://api.rainviewer.com/public/weather-maps.json')
+        self.next_cell_id = 1
+        # Extract configuration values
+        self.latitude = config.get('latitude', -24.98)
+        self.longitude = config.get('longitude', 151.86)
+        self.run_interval = config.get('run_interval_minutes', 3) * 60
+        self.api_url = config.get('api_url', 'https://api.rainviewer.com/public/weather-maps.json')
         
                 # Entity IDs
                 self.entities = {
