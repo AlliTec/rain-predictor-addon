@@ -1219,22 +1219,20 @@
 
         function updateDataDisplay(data) {
             const timeElement = document.getElementById('time-to-rain');
-            let formattedTime = '--';
-            
-            if (data && data.center) {
-                const userLocation = locationMarker.getLatLng();
-                const cellLocation = L.latLng(data.center.lat, data.center.lng);
-                const distance = userLocation.distanceTo(cellLocation) / 1000; // Convert to km
-                const bearing = calculateBearing(userLocation, cellLocation);
-                const timeToRainMinutes = data.speed > 0 ? (distance / data.speed) * 60 : 999;
-                
-                formattedTime = formatTimeToRain(timeToRainMinutes);
+            if (data) {
+                const timeToRain = parseFloat(data.time_to_rain);
+                const distance = parseFloat(data.distance);
+                const speed = parseFloat(data.speed);
+                const direction = parseFloat(data.direction);
+                const bearing = parseFloat(data.bearing);
+
+                const formattedTime = formatTimeToRain(timeToRain);
                 timeElement.classList.toggle('now', formattedTime === 'NOW');
                 timeElement.innerText = formattedTime;
-                
+
                 document.getElementById('distance').innerText = `${distance.toFixed(1)} km`;
-                document.getElementById('speed').innerText = `${data.speed.toFixed(1)} kph`;
-                document.getElementById('direction').innerText = degreesToCardinal(data.direction);
+                document.getElementById('speed').innerText = `${speed.toFixed(1)} kph`;
+                document.getElementById('direction').innerText = degreesToCardinal(direction);
                 document.getElementById('bearing').innerText = degreesToCardinal(bearing);
             } else {
                 timeElement.classList.remove('now');
@@ -1253,7 +1251,10 @@
                 const response = await fetch(apiDataUrl);
                 if (response.ok) {
                     const data = await response.json();
-                    cellData.auto = data;
+                    cellData.auto = {
+                        ...data,
+                        center: { lat: parseFloat(data.latitude), lng: parseFloat(data.longitude) }
+                    };
                     
                     // Update tracker positions for all frames
                     initializeTrackerPositions();
@@ -1266,14 +1267,18 @@
                     console.error(`API request failed: ${response.status}`);
                     // Use simulated data for demo
                     const simData = {
-                        center: {
-                            lat: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
-                            lng: currentLocation.longitude + (Math.random() - 0.5) * 0.5
-                        },
-                        speed: 20 + Math.random() * 30,
-                        direction: Math.random() * 360
+                        time_to_rain: (Math.random() * 60).toFixed(0),
+                        distance: (Math.random() * 100).toFixed(1),
+                        speed: (Math.random() * 100).toFixed(1),
+                        direction: (Math.random() * 360).toFixed(1),
+                        bearing: (Math.random() * 360).toFixed(1),
+                        latitude: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
+                        longitude: currentLocation.longitude + (Math.random() - 0.5) * 0.5
                     };
-                    cellData.auto = simData;
+                    cellData.auto = {
+                        ...simData,
+                        center: { lat: simData.latitude, lng: simData.longitude }
+                    };
                     initializeTrackerPositions();
                     updateTrackerForFrame(animationPosition);
                     updateDataDisplay(simData);
@@ -1282,14 +1287,18 @@
                 console.error('Error fetching data:', error);
                 // Use simulated data for demo
                 const simData = {
-                    center: {
-                        lat: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
-                        lng: currentLocation.longitude + (Math.random() - 0.5) * 0.5
-                    },
-                    speed: 20 + Math.random() * 30,
-                    direction: Math.random() * 360
+                    time_to_rain: (Math.random() * 60).toFixed(0),
+                    distance: (Math.random() * 100).toFixed(1),
+                    speed: (Math.random() * 100).toFixed(1),
+                    direction: (Math.random() * 360).toFixed(1),
+                    bearing: (Math.random() * 360).toFixed(1),
+                    latitude: currentLocation.latitude + (Math.random() - 0.5) * 0.5,
+                    longitude: currentLocation.longitude + (Math.random() - 0.5) * 0.5
                 };
-                cellData.auto = simData;
+                cellData.auto = {
+                    ...simData,
+                    center: { lat: simData.latitude, lng: simData.longitude }
+                };
                 initializeTrackerPositions();
                 updateTrackerForFrame(animationPosition);
                 updateDataDisplay(simData);

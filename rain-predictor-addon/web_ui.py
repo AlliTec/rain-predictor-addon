@@ -245,7 +245,8 @@ def index():
     # Prefer persisted options.json; fall back to HA entities; always cast to float
     lat_opt, lng_opt = read_options_latlon()
     # If HA has newer values, you can prefer them; here we keep options.json as the source of truth for persistence
-    return render_template("index.html", latitude=float(lat_opt), longitude=float(lng_opt))
+    all_data = get_all_data()
+    return render_template("index.html", latitude=float(lat_opt), longitude=float(lng_opt), **all_data)
 
 @app.route("/api/data")
 def api_data():
