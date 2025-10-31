@@ -4,7 +4,6 @@ echo "Starting Rain Predictor Addon (Local Development)..."
 
 # Create necessary directories
 mkdir -p ./debug_images
-mkdir -p ./test_data
 
 # Set environment variables for local testing
 export DATA_PATH=./test_data

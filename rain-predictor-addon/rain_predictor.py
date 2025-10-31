@@ -619,16 +619,6 @@ class RainPredictor:
             logging.warning("No time entity configured, skipping entity updates")
             return
 
-        # Write to local file for development
-        try:
-            data_path = os.environ.get("DATA_PATH", "/data")
-            prediction_file = os.path.join(data_path, "prediction.json")
-            with open(prediction_file, 'w') as f:
-                json.dump(values, f)
-            logging.debug(f"Prediction data written to {prediction_file}")
-        except Exception as e:
-            logging.error(f"Error writing prediction data to file: {e}")
-
         try:
             # Update time to rain
             if self.entities['time']:
