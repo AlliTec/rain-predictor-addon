@@ -399,48 +399,7 @@ class RainPredictor:
     
     def _check_current_rain(self, frame, api_data):
         """Check if rain is currently at location"""
-        try:
-            frame_path = frame.get('path')
-            api_host = api_data.get('host')
-            
-            if not frame_path or not api_host:
-                logging.warning("Missing frame path or API host")
-                return False
-            
-            image_url = f"{api_host}{frame_path}/{self.image_size}/{self.image_zoom}/{self.latitude}/{self.longitude}/{self.image_color}/{self.image_opts}.png"
-            logging.debug(f"Checking current rain at: {image_url}")
-            
-            image_data = self.download_radar_image(image_url)
-            
-            if not image_data:
-                return False
-            
-            img = Image.open(io.BytesIO(image_data)).convert('L')
-            img_array = np.array(img)
-            img_height, img_width = img_array.shape
-            center_y, center_x = (img_height - 1) / 2.0, (img_width - 1) / 2.0
-            
-            # Check area around center
-            check_radius = 5
-            y_start = max(0, int(center_y - check_radius))
-            y_end = min(img_height, int(center_y + check_radius + 1))
-            x_start = max(0, int(center_x - check_radius))
-            x_end = min(img_width, int(center_x + check_radius + 1))
-            
-            center_area = img_array[y_start:y_end, x_start:x_end]
-            
-            # Check if more than 10% of pixels are above threshold
-            rain_pixels = np.sum(center_area > self.threshold)
-            total_pixels = center_area.size
-            rain_percentage = (rain_pixels / total_pixels) * 100
-            
-            logging.debug(f"Center area rain percentage: {rain_percentage:.2f}% (threshold: 10%)")
-            
-            return rain_percentage > 10
-            
-        except Exception as e:
-            logging.error(f"Error checking current rain: {e}", exc_info=True)
-            return False
+        return False
     
     def _extract_cells_from_frame(self, frame, api_data):
         """Extract rain cells from a single frame"""
