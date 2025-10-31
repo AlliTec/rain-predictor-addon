@@ -171,7 +171,9 @@ class RainPredictor:
             'distance': config.get('entities.distance'),
             'speed': config.get('entities.speed'),
             'direction': config.get('entities.direction'),
-            'bearing': config.get('entities.bearing')
+            'bearing': config.get('entities.bearing'),
+            'rain_cell_latitude': config.get('entities.rain_cell_latitude'),
+            'rain_cell_longitude': config.get('entities.rain_cell_longitude')
         }
         logging.debug(f"RainPredictor initialized with time entity: {self.entities['time']}")
 
@@ -609,6 +611,16 @@ class RainPredictor:
                 self.ha_api.call_service("input_number/set_value",
                                        self.entities['bearing'], values['bearing'])
 
+            # Update rain cell latitude
+            if self.entities.get('rain_cell_latitude'):
+                self.ha_api.call_service("input_number/set_value",
+                                       self.entities['rain_cell_latitude'], values['rain_cell_latitude'])
+
+            # Update rain cell longitude
+            if self.entities.get('rain_cell_longitude'):
+                self.ha_api.call_service("input_number/set_value",
+                                       self.entities['rain_cell_longitude'], values['rain_cell_longitude'])
+
             logging.info("Successfully updated Home Assistant entities")
 
         except Exception as e:
@@ -671,7 +683,9 @@ class RainPredictor:
                     'distance_km': round(distance_km, 1),
                     'speed_kph': round(speed_kph, 1),
                     'direction_deg': round(direction_deg, 1),
-                    'bearing_to_cell_deg': round(bearing_to_location, 1)
+                    'bearing_to_cell_deg': round(bearing_to_location, 1),
+                    'rain_cell_latitude': round(current_lat, 4),
+                    'rain_cell_longitude': round(current_lon, 4)
                 }
         
         return best_prediction
@@ -720,6 +734,10 @@ class RainPredictor:
                         values['direction'] = round(prediction['direction_deg'], 1)
                     if prediction.get('bearing_to_cell_deg') is not None:
                         values['bearing'] = round(prediction['bearing_to_cell_deg'], 1)
+                    if prediction.get('rain_cell_latitude') is not None:
+                        values['rain_cell_latitude'] = prediction['rain_cell_latitude']
+                    if prediction.get('rain_cell_longitude') is not None:
+                        values['rain_cell_longitude'] = prediction['rain_cell_longitude']
                 else:
                     logging.warning("❌ No past radar frames available")
         

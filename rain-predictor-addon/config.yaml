@@ -31,6 +31,8 @@ options:
     speed: "input_number.rain_prediction_speed"
     direction: "input_number.rain_cell_direction"
     bearing: "input_number.bearing_to_rain_cell"
+    rain_cell_latitude: "input_number.rain_cell_latitude"
+    rain_cell_longitude: "input_number.rain_cell_longitude"
   defaults:
     no_rain_value: 999
     no_direction_value: -1
