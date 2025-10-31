@@ -428,15 +428,11 @@ class RainPredictor:
             x_end = min(img_width, int(center_x + check_radius + 1))
             
             center_area = img_array[y_start:y_end, x_start:x_end]
+            max_intensity = np.max(center_area)
             
-            # Check if more than 10% of pixels are above threshold
-            rain_pixels = np.sum(center_area > self.threshold)
-            total_pixels = center_area.size
-            rain_percentage = (rain_pixels / total_pixels) * 100
+            logging.debug(f"Center area max intensity: {max_intensity} (threshold: {self.threshold})")
             
-            logging.debug(f"Center area rain percentage: {rain_percentage:.2f}% (threshold: 10%)")
-            
-            return rain_percentage > 10
+            return np.mean(center_area) > self.threshold
             
         except Exception as e:
             logging.error(f"Error checking current rain: {e}", exc_info=True)
