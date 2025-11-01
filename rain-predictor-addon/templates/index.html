@@ -789,13 +789,12 @@
             }
         }
 
-        function updateAutoTrackerDisplay() {
-            if (!cellData.auto || !cellData.auto.center) return;
+        function createTracker(mode) {
+            if (!cellData[mode] || !cellData[mode].center) return;
 
-            const lat = cellData.auto.center.lat;
-            const lng = cellData.auto.center.lng;
-            const mode = 'auto';
-            const color = '#48bb78';
+            const lat = cellData[mode].center.lat;
+            const lng = cellData[mode].center.lng;
+            const color = mode === 'manual' ? '#e53e3e' : '#48bb78';
             const trackerKey = mode + 'Tracker';
 
             // Remove old tracker if exists
@@ -804,9 +803,9 @@
             // Create main tracker icon
             const trackerIcon = L.divIcon({
                 className: `rain-tracker rain-tracker-${mode}`,
-                iconSize: [12, 12],
-                iconAnchor: [6, 6],
-                html: `<div style="width: 12px; height: 12px; background: ${color}; border-radius: 50%; border: 3px solid white;"></div>`
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+                html: `<div style="width: 100%; height: 100%; background: ${color}; border-radius: 50%; border: 3px solid white;"></div>`
             });
 
             trackerMarkers[trackerKey] = L.marker([lat, lng], {
@@ -841,128 +840,16 @@
                 dashArray: '5, 10'
             }).addTo(map);
             trackerMarkers[trackerKey + 'PredictionLine'] = predictionLine;
-        }
 
-        function updateTrackerMarkerPosition(lat, lng, mode) {
-            const trackerKey = mode + 'Tracker';
-            
-            if (trackerMarkers[trackerKey]) {
-                // Update existing tracker position
-                trackerMarkers[trackerKey].setLatLng([lat, lng]);
-                
-                // Update pulse ring if exists
-                if (trackerMarkers[trackerKey + 'Pulse']) {
-                    trackerMarkers[trackerKey + 'Pulse'].setLatLng([lat, lng]);
-                }
-                
-                // Update arrow if exists
-                if (trackerMarkers[trackerKey + 'Arrow']) {
-                    updateTrackerArrow(trackerMarkers[trackerKey + 'Arrow'], lat, lng, cellData[mode]);
-                }
+            // Add label for manual mode
+            if (mode === 'manual') {
+                trackerMarkers[trackerKey].bindTooltip('Manual Point', {
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -20]
+                });
             }
         }
-
-                function createTracker(mode) {
-
-                    const color = mode === 'manual' ? '#e53e3e' : '#48bb78';
-
-                    const trackerKey = mode + 'Tracker';
-
-                    const lat = cellData[mode].center.lat;
-
-                    const lng = cellData[mode].center.lng;
-
-                    
-
-                    // Remove old tracker if exists
-
-                    removeTracker(mode);
-
-                    
-
-                    // Create main tracker icon
-
-                    const trackerIcon = L.divIcon({
-
-                        className: `rain-tracker rain-tracker-${mode}`,
-
-                        iconSize: [24, 24],
-
-                        iconAnchor: [12, 12],
-
-                        html: `<div style="width: 100%; height: 100%; background: ${color}; border-radius: 50%; border: 3px solid white;"></div>`
-
-                    });
-
-                    
-
-                    trackerMarkers[trackerKey] = L.marker([lat, lng], {
-
-                        icon: trackerIcon,
-
-                        zIndexOffset: 1000
-
-                    }).addTo(map);
-
-                    
-
-                    // Add pulse effect
-
-                    const pulseCircle = L.circle([lat, lng], {
-
-                        radius: 1000,
-
-                        color: color,
-
-                        fillColor: color,
-
-                        fillOpacity: 0.2,
-
-                        weight: 2,
-
-                        className: 'tracker-pulse'
-
-                    }).addTo(map);
-
-                    
-
-                    trackerMarkers[trackerKey + 'Pulse'] = pulseCircle;
-
-                    
-
-                    // Add direction arrow
-
-                    if (cellData[mode]) {
-
-                        const arrow = createTrackerArrow(lat, lng, cellData[mode]);
-
-                        if (arrow) {
-
-                            trackerMarkers[trackerKey + 'Arrow'] = arrow;
-
-                        }
-
-                    }
-
-                    
-
-                    // Add label
-
-                    if (mode === 'manual') {
-
-                        trackerMarkers[trackerKey].bindTooltip('Manual Point', {
-
-                            permanent: false,
-
-                            direction: 'top',
-
-                            offset: [0, -20]
-
-                        });
-
-                    }
-
-                }
 
         function updatePredictionLine(mode) {
             const color = mode === 'manual' ? '#e53e3e' : '#48bb78';
