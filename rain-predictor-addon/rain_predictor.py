@@ -17,7 +17,7 @@ from scipy.ndimage import label
 from math import radians, cos, sin, asin, sqrt, atan2, degrees
 import signal
 
-VERSION = "1.1.4-debug"
+VERSION = "1.1.6-debug"
 
 class AddonConfig:
     """Load and manage addon configuration"""
@@ -636,6 +636,7 @@ class RainPredictor:
         for cell_id, cell in self.tracked_cells.items():
             logging.info(f"\n  Cell #{cell_id}:")
             logging.info(f"    Track length: {len(cell.positions)} position(s)")
+            logging.info(f"    Cell positions: {cell.positions}")
             
             if len(cell.positions) < self.min_track_len:
                 logging.info(f"    ❌ Track too short (need {self.min_track_len})")
@@ -701,7 +702,9 @@ class RainPredictor:
             'distance': self.defaults['no_rain'],
             'speed': 0.0,
             'direction': self.defaults['no_direction'],
-            'bearing': self.defaults['no_bearing']
+            'bearing': self.defaults['no_bearing'],
+            'rain_cell_latitude': None,
+            'rain_cell_longitude': None
         }
         
         try:

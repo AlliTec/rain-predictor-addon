@@ -1336,14 +1336,14 @@
                 const direction = parseFloat(data.direction);
                 const bearing = parseFloat(data.bearing);
 
-                const formattedTime = formatTimeToRain(timeToRain);
+                const formattedTime = (timeToRain === 999) ? '--' : formatTimeToRain(timeToRain);
                 timeElement.classList.toggle('now', formattedTime === 'NOW');
                 timeElement.innerText = formattedTime;
 
-                document.getElementById('distance').innerText = `${distance.toFixed(1)} km`;
-                document.getElementById('speed').innerText = `${speed.toFixed(1)} kph`;
-                document.getElementById('direction').innerText = degreesToCardinal(direction);
-                document.getElementById('bearing').innerText = degreesToCardinal(bearing);
+                document.getElementById('distance').innerText = (distance === 999) ? '--' : `${distance.toFixed(1)} km`;
+                document.getElementById('speed').innerText = (speed === 0) ? '--' : `${speed.toFixed(1)} kph`;
+                document.getElementById('direction').innerText = (direction === -1) ? '--' : degreesToCardinal(direction);
+                document.getElementById('bearing').innerText = (bearing === -1) ? '--' : degreesToCardinal(bearing);
             } else {
                 timeElement.classList.remove('now');
                 timeElement.innerText = '--';
