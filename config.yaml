@@ -1,4 +1,4 @@
 name: Rain Predictor
-version: "1.1.9-debug"
+version: "1.1.10-debug"
 slug: rain_predictor
 description: "Advanced rain prediction using radar image analysis"

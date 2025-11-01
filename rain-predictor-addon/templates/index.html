@@ -790,17 +790,29 @@
         }
 
         function createTracker(mode) {
-            if (!cellData[mode] || !cellData[mode].center) return;
+            console.log(`Creating tracker for mode: ${mode}`);
+            if (!cellData[mode] || !cellData[mode].center) {
+                console.log(`No cell data for mode: ${mode}`);
+                return;
+            }
 
             const lat = cellData[mode].center.lat;
             const lng = cellData[mode].center.lng;
-            const color = mode === 'manual' ? '#e53e3e' : '#48bb78';
+            console.log(`Tracker coordinates: lat=${lat}, lng=${lng}`);
+
+            if (isNaN(lat) || isNaN(lng)) {
+                console.error('Invalid tracker coordinates');
+                return;
+            }
+
+            const color = mode === 'manual' ? '#e53e3e' : '#00FF00';
             const trackerKey = mode + 'Tracker';
 
             // Remove old tracker if exists
             removeTracker(mode);
 
             // Create a circle to highlight the tracked cell
+            console.log('Creating circle...');
             const circle = L.circle([lat, lng], {
                 radius: 5000, // 5km radius
                 color: '#00FF00', // Lime green border
@@ -809,8 +821,10 @@
                 fillOpacity: 0.8,
                 zIndex: 10000 // Ensure it's on top
             }).addTo(map);
+            console.log('Circle added to map');
 
             trackerMarkers[trackerKey] = circle;
+            console.log('Tracker markers object:', trackerMarkers);
 
             // Add pulse effect
             const pulseCircle = L.circle([lat, lng], {
