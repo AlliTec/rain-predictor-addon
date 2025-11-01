@@ -17,7 +17,7 @@ from scipy.ndimage import label
 from math import radians, cos, sin, asin, sqrt, atan2, degrees
 import signal
 
-VERSION = "1.1.7-debug"
+VERSION = "1.1.8-debug"
 
 class AddonConfig:
     """Load and manage addon configuration"""
@@ -654,17 +654,19 @@ class RainPredictor:
                 continue
             
             distance_km = self.haversine(current_lat, current_lon, self.latitude, self.longitude)
+            bearing_to_location = self.calculate_bearing(current_lat, current_lon, self.latitude, self.longitude)
             bearing_from_user_to_cell = self.calculate_bearing(self.latitude, self.longitude, current_lat, current_lon)
             
-            if bearing_from_user_to_cell is None:
-                logging.info(f"    ❌ Cannot calculate bearing from user to cell")
+            if bearing_to_location is None or bearing_from_user_to_cell is None:
+                logging.info(f"    ❌ Cannot calculate bearing")
                 continue
             
-            angle_diff = abs((direction_deg - bearing_from_user_to_cell + 180) % 360 - 180)
+            angle_diff = abs((direction_deg - bearing_to_location + 180) % 360 - 180)
             
             logging.info(f"    Distance: {distance_km:.1f}km")
             logging.info(f"    Speed: {speed_kph:.1f}km/h")
             logging.info(f"    Moving: {direction_deg:.1f}°")
+            logging.info(f"    Bearing to location: {bearing_to_location:.1f}°")
             logging.info(f"    Bearing from user to cell: {bearing_from_user_to_cell:.1f}°")
             logging.info(f"    Angle difference: {angle_diff:.1f}°")
             
