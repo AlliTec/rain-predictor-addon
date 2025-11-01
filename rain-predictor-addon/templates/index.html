@@ -803,9 +803,9 @@
             // Create a circle to highlight the tracked cell
             const circle = L.circle([lat, lng], {
                 radius: 5000, // 5km radius
-                color: color,
-                weight: 5,
-                fillColor: color,
+                color: '#00FF00', // Lime green border
+                weight: 1,
+                fillColor: '#008000', // Dark green fill
                 fillOpacity: 0.8,
                 zIndex: 10000 // Ensure it's on top
             }).addTo(map);
