@@ -654,18 +654,18 @@ class RainPredictor:
                 continue
             
             distance_km = self.haversine(current_lat, current_lon, self.latitude, self.longitude)
-            bearing_to_location = self.calculate_bearing(current_lat, current_lon, self.latitude, self.longitude)
+            bearing_from_user_to_cell = self.calculate_bearing(self.latitude, self.longitude, current_lat, current_lon)
             
-            if bearing_to_location is None:
-                logging.info(f"    ❌ Cannot calculate bearing")
+            if bearing_from_user_to_cell is None:
+                logging.info(f"    ❌ Cannot calculate bearing from user to cell")
                 continue
             
-            angle_diff = abs((direction_deg - bearing_to_location + 180) % 360 - 180)
+            angle_diff = abs((direction_deg - bearing_from_user_to_cell + 180) % 360 - 180)
             
             logging.info(f"    Distance: {distance_km:.1f}km")
             logging.info(f"    Speed: {speed_kph:.1f}km/h")
             logging.info(f"    Moving: {direction_deg:.1f}°")
-            logging.info(f"    Bearing to location: {bearing_to_location:.1f}°")
+            logging.info(f"    Bearing from user to cell: {bearing_from_user_to_cell:.1f}°")
             logging.info(f"    Angle difference: {angle_diff:.1f}°")
             
             if angle_diff > self.arrival_angle_threshold:
@@ -684,7 +684,7 @@ class RainPredictor:
                     'distance_km': round(distance_km, 1),
                     'speed_kph': round(speed_kph, 1),
                     'direction_deg': round(direction_deg, 1),
-                    'bearing_to_cell_deg': round(bearing_to_location, 1),
+                    'bearing_to_cell_deg': round(bearing_from_user_to_cell, 1),
                     'rain_cell_latitude': round(current_lat, 4),
                     'rain_cell_longitude': round(current_lon, 4)
                 }
