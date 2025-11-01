@@ -1,5 +1,5 @@
 name: Rain Predictor
-version: "1.1.6-debug"
+version: "1.1.7-debug"
 slug: rain_predictor
 description: "Advanced rain prediction using radar image analysis"
 url: "https://github.com/AlliTec/rain-predictor-addon"
