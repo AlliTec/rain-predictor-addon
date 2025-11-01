@@ -245,7 +245,7 @@ def index():
     lat_opt, lng_opt = read_options_latlon()
     # If HA has newer values, you can prefer them; here we keep options.json as the source of truth for persistence
     all_data = get_all_data()
-    return render_template("index.html", **all_data)
+    return render_template("index.html", user_latitude=float(lat_opt), user_longitude=float(lng_opt), **all_data)
 
 @app.route("/api/data")
 def api_data():
