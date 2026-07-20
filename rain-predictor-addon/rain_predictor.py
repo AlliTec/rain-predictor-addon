@@ -17,7 +17,7 @@ from scipy.ndimage import label
 from math import radians, cos, sin, asin, sqrt, atan2, degrees, log, tan, pi, atan, sinh
 import signal
 
-VERSION = "1.1.64-debug"
+VERSION = "1.1.64"
 
 class AddonConfig:
     """Load and manage addon configuration"""
