@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageDraw
 import io
 from scipy.ndimage import label
-from math import radians, cos, sin, asin, sqrt, atan2, degrees
+from math import radians, cos, sin, asin, sqrt, atan2, degrees, log, tan, pi, atan, sinh
 import signal
 
 VERSION = "1.1.10-debug"
@@ -404,79 +404,159 @@ class RainPredictor:
         """Check if rain is currently at location"""
         return False
     
+    def _get_tile_coords(self, lat, lon, zoom):
+        """Convert lat/lon to RainViewer tile (x, y) for the given zoom level.
+
+        Uses the Web Mercator (EPSG:3857) slippy-map tile standard so that
+        the requested tile actually covers the user's geographic location
+        instead of always requesting the root (0/0/0) tile.
+
+        Formula from https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
+
+        Args:
+            lat: Latitude in decimal degrees.
+            lon: Longitude in decimal degrees.
+            zoom: Integer zoom level (0–22).
+
+        Returns:
+            Tuple (x, y) of integer tile coordinates.
+        """
+        lat_rad = radians(lat)
+        n = 2 ** zoom
+        x = int((lon + 180.0) / 360.0 * n)
+        y = int(n * (1.0 - log(tan(lat_rad) + 1.0 / cos(lat_rad)) / pi) / 2.0)
+        # Clamp to valid tile range for the given zoom
+        x = max(0, min(x, n - 1))
+        y = max(0, min(y, n - 1))
+        return x, y
+
+    def _tile_bounds(self, x, y, zoom):
+        """Return the (lat_north, lon_west, lat_south, lon_east) of a tile.
+
+        This is the inverse of the slippy-map projection and lets us map
+        pixel offsets inside a single 256×256 tile back to geographic
+        coordinates.
+
+        Args:
+            x: Tile X index.
+            y: Tile Y index.
+            zoom: Zoom level.
+
+        Returns:
+            Tuple (lat_north, lon_west, lat_south, lon_east) in degrees.
+        """
+        n = 2 ** zoom
+        lon_west = x / n * 360.0 - 180.0
+        lon_east = (x + 1) / n * 360.0 - 180.0
+
+        lat_north = degrees(atan(sinh(pi * (1 - 2 * y / n))))
+        lat_south = degrees(atan(sinh(pi * (1 - 2 * (y + 1) / n))))
+
+        return lat_north, lon_west, lat_south, lon_east
+
     def _extract_cells_from_frame(self, frame, api_data):
         """Extract rain cells from a single frame"""
         try:
             frame_path = frame.get('path')
             api_host = api_data.get('host')
-            
+
             if not frame_path or not api_host:
                 logging.warning("Missing frame path or API host")
                 return []
-            
-            image_url = f"{api_host}{frame_path}/{self.image_size}/{self.image_zoom}/{self.latitude}/{self.longitude}/{self.image_color}/{self.image_opts}.png"
+
+            # Compute the correct tile coordinates for this location
+            tile_x, tile_y = self._get_tile_coords(
+                self.latitude, self.longitude, self.image_zoom
+            )
+
+            image_url = (
+                f"{api_host}{frame_path}/"
+                f"{self.image_size}/{self.image_zoom}/{tile_x}/{tile_y}/"
+                f"{self.image_color}/{self.image_opts}.png"
+            )
             image_data = self.download_radar_image(image_url)
-            
+
             if not image_data:
                 logging.warning("Failed to download radar image")
                 return []
-            
+
             img = Image.open(io.BytesIO(image_data)).convert('L')
             img_array = np.array(img)
-            
-            logging.debug(f"Image shape: {img_array.shape}, min: {np.min(img_array)}, max: {np.max(img_array)}")
-            
+
+            # Derive geographic bounds for this specific tile
+            lat_north, lon_west, lat_south, lon_east = self._tile_bounds(
+                tile_x, tile_y, self.image_zoom
+            )
+
+            logging.debug(
+                f"Image shape: {img_array.shape}, min: {np.min(img_array)}, "
+                f"max: {np.max(img_array)}"
+            )
+            logging.debug(
+                f"Tile ({tile_x}, {tile_y}) zoom {self.image_zoom} bounds: "
+                f"lat [{lat_south:.4f}, {lat_north:.4f}] "
+                f"lon [{lon_west:.4f}, {lon_east:.4f}]"
+            )
+
             # Find rain pixels
             rain_pixels = img_array > self.threshold
             rain_pixel_count = np.sum(rain_pixels)
-            
+
             logging.debug(f"Rain pixels above threshold {self.threshold}: {rain_pixel_count}")
-            
+
             if not np.any(rain_pixels):
                 logging.debug("No rain pixels found above threshold")
                 return []
-            
+
             # Label connected components
             labeled_image, num_labels = label(rain_pixels)
-            
+
             logging.debug(f"Found {num_labels} connected components")
-            
+
             cells = []
             img_height, img_width = img_array.shape
-            lat_inc = self.lat_range / img_height
-            lon_inc = self.lon_range / img_width
-            center_y = (img_height - 1) / 2.0
-            center_x = (img_width - 1) / 2.0
-            
+
+            # Per-pixel degree increments derived from the *actual* tile bounds
+            lat_span = lat_north - lat_south  # positive: north > south
+            lon_span = lon_east - lon_west
+            lat_inc = lat_span / img_height
+            lon_inc = lon_span / img_width
+
             for i in range(1, num_labels + 1):
                 y_coords, x_coords = np.where(labeled_image == i)
                 cell_size = len(y_coords)
-                
+
                 if cell_size < 5:
                     logging.debug(f"  Component {i}: size {cell_size} too small, skipping")
                     continue
-                
+
                 centroid_x, centroid_y = np.mean(x_coords), np.mean(y_coords)
-                lat_offset = (center_y - centroid_y) * lat_inc
-                lon_offset = (centroid_x - center_x) * lon_inc
-                est_lat = np.clip(self.latitude + lat_offset, -90, 90)
-                est_lon = np.clip(self.longitude + lon_offset, -180, 180)
-                
+
+                # Map pixel centroid → geographic coordinate using tile bounds
+                # Pixel (0, 0) corresponds to (lat_north, lon_west)
+                # Pixel (width-1, height-1) corresponds to (lat_south, lon_east)
+                est_lon = lon_west + centroid_x * lon_inc
+                est_lat = lat_north - centroid_y * lat_inc
+                est_lat = np.clip(est_lat, -90, 90)
+                est_lon = np.clip(est_lon, -180, 180)
+
                 intensity = np.mean(img_array[y_coords, x_coords])
-                
+
                 cells.append({
-                    'lat': est_lat,
-                    'lon': est_lon,
-                    'intensity': intensity,
-                    'size': cell_size
+                    'lat': float(est_lat),
+                    'lon': float(est_lon),
+                    'intensity': float(intensity),
+                    'size': int(cell_size)
                 })
-                
-                logging.debug(f"  Component {i}: size={cell_size}, intensity={intensity:.1f}, "
-                            f"centroid=({centroid_x:.1f},{centroid_y:.1f}), "
-                            f"location=({est_lat:.4f},{est_lon:.4f})")
-            
+
+                logging.debug(
+                    f"  Component {i}: size={cell_size}, intensity={intensity:.1f}, "
+                    f"centroid=({centroid_x:.1f},{centroid_y:.1f}), "
+                    f"location=({est_lat:.4f},{est_lon:.4f})"
+                )
+
             return cells
-            
+
         except Exception as e:
             logging.error(f"Error extracting cells: {e}", exc_info=True)
             return []
