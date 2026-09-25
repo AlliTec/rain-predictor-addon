@@ -37,6 +37,6 @@ LABEL \
   io.hass.description="Advanced rain prediction using radar image analysis" \
   io.hass.arch="armhf|aarch64|amd64|armv7|i386" \
   io.hass.type="addon" \
-  io.hass.version="1.1.64"
+  io.hass.version="1.1.65"
 
 CMD [ "/run.sh" ]
