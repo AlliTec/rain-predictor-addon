@@ -8,10 +8,7 @@ RUN apk add --no-cache \
     py3-numpy \
     py3-scipy \
     py3-pillow \
-    py3-requests \
-    gcc \
-    musl-dev \
-    python3-dev
+    py3-requests
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt /tmp/
