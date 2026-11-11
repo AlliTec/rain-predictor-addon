@@ -17,7 +17,7 @@ from scipy.ndimage import label
 from math import radians, cos, sin, asin, sqrt, atan2, degrees, log, tan, pi, atan, sinh
 import signal
 
-VERSION = "1.1.65"
+VERSION = "1.1.67"
 
 class AddonConfig:
     """Load and manage addon configuration"""
@@ -95,6 +95,64 @@ class HomeAssistantAPI:
             logging.error(f"Error calling service {service} for {entity_id}: {e}")
             return False
 
+def _build_palette():
+    """RainViewer's tiles are one fixed 54-colour palette whatever colour scheme is asked for (checked 2026-11-11: schemes 0-8 return identical pixels). Weak echo is tan, then light blue
+    darkening to deep blue, yellow to orange, red to dark red, and magenta for the strongest. Listed here from weakest to strongest."""
+    tan = [(r, g, b) for r, g, b in [(170, 158, 121), (182, 169, 126), (194, 180, 130), (206, 192, 135), (210, 196, 139), (214, 200, 143), (218, 204, 147), (222, 208, 151)]]
+    blue = [(136, 221, 238), (108, 209, 235), (81, 197, 232), (54, 186, 229), (27, 174, 226), (0, 163, 224), (0, 154, 213), (0, 145, 202), (0, 136, 191), (0, 127, 180),
+            (0, 119, 170), (0, 112, 163), (0, 105, 156), (0, 98, 149), (0, 91, 142), (0, 85, 136), (0, 81, 128), (0, 78, 120), (0, 74, 112), (0, 71, 104)]
+    warm = [(255, g, 0) for g in (238, 224, 210, 197, 183, 170, 159, 149, 139, 129, 68)] + [(242, 54, 0), (230, 40, 0), (217, 27, 0), (205, 13, 0), (193, 0, 0), (168, 0, 0), (143, 0, 0), (118, 0, 0), (93, 0, 0)]
+    pink = [(255, g, 255) for g in (119, 129, 139, 149, 159, 170)]
+    return np.array(tan + blue + warm + pink, dtype=np.int32)
+
+
+# shortcut: RainViewer does not publish the colour-to-dBZ table, so the 54 steps are spread evenly over 5..58 dBZ; tune analysis_settings.rain_mm_calibration against the rain gauge.
+_PALETTE = _build_palette()
+_PALETTE_DBZ = np.linspace(5.0, 58.0, len(_PALETTE))
+_PALETTE_RATE = np.minimum(((10.0 ** (_PALETTE_DBZ / 10.0)) / 200.0) ** (1.0 / 1.6), 100.0)    # Marshall-Palmer Z = 200 R^1.6, capped at 100 mm/h (hail)
+
+
+def rgb_to_rate(rgb):
+    """Rain rate in mm/h for every pixel of an HxWx3 uint8 radar tile: nearest palette colour, then the Marshall-Palmer rate."""
+    flat = rgb.reshape(-1, 3).astype(np.int32)
+    codes = (flat[:, 0] << 16) | (flat[:, 1] << 8) | flat[:, 2]
+    uniq, inv = np.unique(codes, return_inverse=True)
+    ucol = np.stack([(uniq >> 16) & 255, (uniq >> 8) & 255, uniq & 255], axis=1)
+    nearest = ((ucol[:, None, :] - _PALETTE[None, :, :]) ** 2).sum(axis=2).argmin(axis=1)
+    return _PALETTE_RATE[nearest][inv].reshape(rgb.shape[:2])
+
+
+def rain_window(pts, lat0, lon0, speed_kph, heading_deg, half_width_km=2.0, rates=None, calibration=1.0):
+    """When the rain of one cell starts and stops at (lat0, lon0), from the cell's own footprint (2026-11-11, Dale: measure the leading edge's arrival and the trailing edge's arrival; the
+    difference is how long it rains). Every pixel of the cell is carried along the cell's heading at its speed; the pixels that cross a corridor of +/- half_width_km around the
+    property's line give the first and last arrival. With rates (mm/h per pixel, from the radar colours) it also gives mm: the mean rate of the pixels still to arrive, times calibration, times the hours it rains.
+    Returns {start_min, end_min, duration_min, raining_now, mm} (mm is None without rates) or None (no footprint, too slow, the cell misses the corridor, or it has passed).
+    Assumes the cell keeps its shape and speed; a cell cut off by the edge of the radar tile has its trailing edge underestimated."""
+    if pts is None or len(pts) == 0 or speed_kph is None or speed_kph < 1 or heading_deg is None:
+        return None
+    pts = np.asarray(pts, dtype=np.float64)
+    x = (pts[:, 1] - lon0) * 111.32 * cos(radians(lat0))      # km east of the property
+    y = (pts[:, 0] - lat0) * 110.57                                      # km north of the property
+    th = radians(heading_deg)
+    dx, dy = sin(th), cos(th)
+    along = x * dx + y * dy                  # km ahead of the property along the travel line; negative = still on its way
+    cross = x * dy - y * dx
+    near = np.abs(cross) <= half_width_km
+    if not np.any(near):
+        return None
+    minutes = -along[near] / speed_kph * 60.0
+    lead, trail = float(minutes.min()), float(minutes.max())
+    if trail <= 0:
+        return None
+    start = max(lead, 0.0)
+    mm = None
+    if rates is not None and len(rates) == len(pts):
+        ahead = np.asarray(rates, dtype=np.float64)[near][minutes > 0]      # pixels that have not passed the property yet
+        if len(ahead):
+            mm = round(float(ahead.mean()) * calibration * (trail - start) / 60.0, 1)
+    return {'start_min': round(start), 'end_min': round(trail), 'duration_min': round(trail - start), 'raining_now': lead <= 0, 'mm': mm}
+
+
 class RainCell:
     """Represents a tracked rain cell"""
     
@@ -103,6 +161,8 @@ class RainCell:
         self.positions = [(lat, lon, timestamp)]
         self.intensity = intensity
         self.last_seen = timestamp
+        self.footprint = None        # lat/lon pixels of the latest sighting (see rain_window)
+        self.footprint_rates = None  # mm/h of each footprint pixel
     
     def add_position(self, lat, lon, timestamp, intensity=0):
         """Add a new position observation"""
@@ -173,7 +233,10 @@ class RainPredictor:
             'direction': config.get('entities.direction'),
             'bearing': config.get('entities.bearing'),
             'rain_cell_latitude': config.get('entities.rain_cell_latitude'),
-            'rain_cell_longitude': config.get('entities.rain_cell_longitude')
+            'rain_cell_longitude': config.get('entities.rain_cell_longitude'),
+            'duration': config.get('entities.duration'),          # optional: input_number holding how long the rain lasts, in minutes (0 = none)
+            'rain_end': config.get('entities.rain_end'),          # optional: minutes until the trailing edge has passed
+            'rain_mm': config.get('entities.rain_mm')             # optional: input_number holding the expected rain in mm
         }
         logging.debug(f"RainPredictor initialized with time entity: {self.entities['time']}")
 
@@ -196,6 +259,7 @@ class RainPredictor:
         self.lat_range = config.get('analysis_settings.lat_range_deg', 1.80)
         self.lon_range = config.get('analysis_settings.lon_range_deg', 1.99)
         self.arrival_angle_threshold = config.get('analysis_settings.arrival_angle_threshold_deg', 45)
+        self.rain_mm_calibration = float(config.get('analysis_settings.rain_mm_calibration', 1.0))   # scale the radar estimate to the rain gauge
 
         # Debug settings
         self.debug_dir = config.get('debug.debug_dir', '/share/rain_predictor_debug')
@@ -480,7 +544,8 @@ class RainPredictor:
                 logging.warning("Failed to download radar image")
                 return []
 
-            img = Image.open(io.BytesIO(image_data)).convert('L')
+            src = Image.open(io.BytesIO(image_data))
+            img = src.convert('L')
             img_array = np.array(img)
 
             # Derive geographic bounds for this specific tile
@@ -507,6 +572,8 @@ class RainPredictor:
             if not np.any(rain_pixels):
                 logging.debug("No rain pixels found above threshold")
                 return []
+
+            rate_array = rgb_to_rate(np.array(src.convert('RGB')))      # mm/h per pixel from the palette colour
 
             # Label connected components
             labeled_image, num_labels = label(rain_pixels)
@@ -542,7 +609,14 @@ class RainPredictor:
 
                 intensity = np.mean(img_array[y_coords, x_coords])
 
+                # the cell's pixels as lat/lon (thinned to about 1500): used to find the leading and trailing edge along the line the cell travels
+                step = max(1, cell_size // 1500)
+                ys, xs = y_coords[::step], x_coords[::step]
+                pts = np.column_stack([lat_north - (ys + 0.5) * lat_inc, lon_west + (xs + 0.5) * lon_inc]).astype(np.float32)
+
                 cells.append({
+                    'pts': pts,
+                    'rates': rate_array[ys, xs].astype(np.float32),
                     'lat': float(est_lat),
                     'lon': float(est_lon),
                     'intensity': float(intensity),
@@ -588,6 +662,8 @@ class RainPredictor:
                     timestamp,
                     closest_cell.get('intensity', 0)
                 )
+                tracked_cell.footprint = closest_cell.get('pts')
+                tracked_cell.footprint_rates = closest_cell.get('rates')
                 unmatched_cells.remove(closest_cell)
                 matched_count += 1
                 logging.debug(f"Matched cell to track #{cell_id} (moved {min_distance:.1f}km)")
@@ -601,6 +677,8 @@ class RainPredictor:
                 timestamp,
                 cell.get('intensity', 0)
             )
+            new_track.footprint = cell.get('pts')
+            new_track.footprint_rates = cell.get('rates')
             self.tracked_cells[self.next_cell_id] = new_track
             logging.info(f"➕ Created new track ID {self.next_cell_id}")
             self.next_cell_id += 1
@@ -701,6 +779,13 @@ class RainPredictor:
                 self.ha_api.call_service("input_number/set_value",
                                        self.entities['rain_cell_longitude'], values['rain_cell_longitude'])
 
+            for key in ('duration', 'rain_end', 'rain_mm'):                   # optional, last: a missing helper in Home Assistant must not stop the entities above
+                if self.entities.get(key):
+                    try:
+                        self.ha_api.call_service("input_number/set_value", self.entities[key], values.get(key, 0))
+                    except Exception as e:
+                        logging.warning(f"Could not update optional entity {self.entities[key]}: {e}")
+
             logging.info("Successfully updated Home Assistant entities")
 
         except Exception as e:
@@ -761,7 +846,11 @@ class RainPredictor:
             
             if time_to_arrival_minutes < min_arrival_time:
                 min_arrival_time = time_to_arrival_minutes
+                window = rain_window(cell.footprint, self.latitude, self.longitude, speed_kph, direction_deg, rates=cell.footprint_rates, calibration=self.rain_mm_calibration)
+                if window:
+                    logging.info(f"    Rain window: starts in {window['start_min']} min, ends in {window['end_min']} min, lasts {window['duration_min']} min, about {window['mm']} mm")
                 best_prediction = {
+                    'rain_window': window,
                     'time_to_rain': round(time_to_arrival_minutes),
                     'distance_km': round(distance_km, 1),
                     'speed_kph': round(speed_kph, 1),
@@ -786,7 +875,10 @@ class RainPredictor:
             'direction': self.defaults['no_direction'],
             'bearing': self.defaults['no_bearing'],
             'rain_cell_latitude': None,
-            'rain_cell_longitude': None
+            'rain_cell_longitude': None,
+            'duration': 0,
+            'rain_end': 0,
+            'rain_mm': 0
         }
         
         try:
@@ -819,6 +911,10 @@ class RainPredictor:
                         values['direction'] = round(prediction['direction_deg'], 1)
                     if prediction.get('bearing_to_cell_deg') is not None:
                         values['bearing'] = round(prediction['bearing_to_cell_deg'], 1)
+                    win = prediction.get('rain_window')
+                    if win:
+                        values['duration'], values['rain_end'] = win['duration_min'], win['end_min']
+                        values['rain_mm'] = win.get('mm') or 0
                     if prediction.get('rain_cell_latitude') is not None:
                         values['rain_cell_latitude'] = prediction['rain_cell_latitude']
                     if prediction.get('rain_cell_longitude') is not None:
@@ -838,6 +934,7 @@ class RainPredictor:
         logging.info(f"  Speed: {values['speed']} km/h")
         logging.info(f"  Direction: {values['direction']}°")
         logging.info(f"  Bearing: {values['bearing']}°")
+        logging.info(f"  Rain lasts: {values['duration']} minutes (ends in {values['rain_end']}), about {values['rain_mm']} mm")
         logging.info("=" * 60 + "\n")
 
     def run(self):

@@ -427,6 +427,8 @@
 
     <div id="data-panel">
         <div class="data-item"><div class="data-value" id="time-to-rain">--</div><div class="data-label">TIME TO RAIN</div></div>
+        <div class="data-item"><div class="data-value" id="duration">--</div><div class="data-label">LASTS</div></div>
+        <div class="data-item"><div class="data-value" id="rain-mm">--</div><div class="data-label">RAIN</div></div>
         <div class="data-item"><div class="data-value" id="distance">--</div><div class="data-label">DISTANCE</div></div>
         <div class="data-item"><div class="data-value" id="speed">--</div><div class="data-label">SPEED</div></div>
         <div class="data-item"><div class="data-value" id="direction">--</div><div class="data-label">DIRECTION</div></div>
@@ -1240,6 +1242,10 @@
                 timeElement.classList.toggle('now', formattedTime === 'NOW');
                 timeElement.innerText = formattedTime;
 
+                const duration = parseFloat(data.duration);
+                document.getElementById('duration').innerText = (!(duration > 0) || timeToRain === 999) ? '--' : '~' + formatTimeToRain(duration).replace(/^NOW$/, '0 min');
+                const rainMm = parseFloat(data.rain_mm);
+                document.getElementById('rain-mm').innerText = (!(rainMm > 0) || timeToRain === 999) ? '--' : '~' + (rainMm < 10 ? rainMm.toFixed(1) : Math.round(rainMm)) + ' mm';
                 document.getElementById('distance').innerText = (distance === 999) ? '--' : `${distance.toFixed(1)} km`;
                 document.getElementById('speed').innerText = (speed === 0) ? '--' : `${speed.toFixed(1)} kph`;
                 document.getElementById('direction').innerText = (direction === -1) ? '--' : degreesToCardinal(direction);
@@ -1248,6 +1254,8 @@
                 timeElement.classList.remove('now');
                 timeElement.innerText = '--';
                 document.getElementById('distance').innerText = '--';
+                document.getElementById('duration').innerText = '--';
+                document.getElementById('rain-mm').innerText = '--';
                 document.getElementById('speed').innerText = '--';
                 document.getElementById('direction').innerText = '--';
                 document.getElementById('bearing').innerText = '--';

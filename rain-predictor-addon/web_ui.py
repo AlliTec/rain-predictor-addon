@@ -83,6 +83,8 @@ def get_all_data():
         "time_to_rain": ha_api.get_state("input_number.rain_arrival_minutes", "--"),
         "distance": ha_api.get_state("input_number.rain_prediction_distance", "--"),
         "speed": ha_api.get_state("input_number.rain_prediction_speed", "--"),
+        "duration": ha_api.get_state("input_number.rain_duration_minutes", "--"),
+        "rain_mm": ha_api.get_state("input_number.rain_amount_mm", "--"),
         "direction": ha_api.get_state("input_number.rain_cell_direction", "N/A"),
         "bearing": ha_api.get_state("input_number.bearing_to_rain_cell", "N/A"),
         "latitude": ha_api.get_state("input_number.rain_cell_latitude", -24.98),

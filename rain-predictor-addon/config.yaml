@@ -1,5 +1,5 @@
 name: Rain Predictor
-version: '1.1.65'
+version: '1.1.67'
 slug: rain_predictor
 description: "Advanced rain prediction using radar image analysis"
 url: "https://github.com/AlliTec/rain-predictor-addon"
@@ -34,6 +34,9 @@ options:
     bearing: "input_number.bearing_to_rain_cell"
     rain_cell_latitude: "input_number.rain_cell_latitude"
     rain_cell_longitude: "input_number.rain_cell_longitude"
+    duration: "input_number.rain_duration_minutes"
+    rain_end: "input_number.rain_end_minutes"
+    rain_mm: "input_number.rain_amount_mm"
   defaults:
     no_rain_value: 999
     no_direction_value: -1
@@ -48,6 +51,7 @@ options:
     lat_range_deg: 2.5
     lon_range_deg: 2.5
     arrival_angle_threshold_deg: 90
+    rain_mm_calibration: 1.0
   tracking_settings:
     max_tracking_distance_km: 50
     min_track_length: 2
@@ -79,6 +83,7 @@ schema:
     lat_range_deg: float(0.1,10.0)
     lon_range_deg: float(0.1,10.0)
     arrival_angle_threshold_deg: float(1,180)
+    rain_mm_calibration: float(0.1,10.0)?
   tracking_settings:
     max_tracking_distance_km: int(1,100)
     min_track_length: int(2,10)
